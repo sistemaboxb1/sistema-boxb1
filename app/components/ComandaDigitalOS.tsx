@@ -23,26 +23,25 @@ interface OrdemServicoHistorico {
   status_pagamento: string;
   forma_pagamento: string;
   criado_em: string;
+  cliente_id?: string;
 }
 
 export default function ComandaDigitalOS() {
   const [modoVisualizacao, setModoVisualizacao] = useState<'interno' | 'cliente'>('interno');
 
-  // Numeração da O.S.
+  // Identificador interno se estamos editando uma O.S. existente
+  const [osEditandoId, setOsEditandoId] = useState<string | null>(null);
   const [osCodigo, setOsCodigo] = useState<string>('OS-2026-' + Math.floor(100 + Math.random() * 900));
   
-  // Lista de clientes vindos do Supabase para seleção
   const [listaClientes, setListaClientes] = useState<ClienteOpcao[]>([]);
   const [clienteSelecionadoId, setClienteSelecionadoId] = useState<string>('novo');
   
-  // Dados do cliente (caso vá cadastrar na hora)
   const [clienteNome, setClienteNome] = useState<string>('');
   const [telefone, setTelefone] = useState<string>('');
   const [modeloCarro, setModeloCarro] = useState<string>('');
   const [placa, setPlaca] = useState<string>('');
   const [problemaRelatado, setProblemaRelatado] = useState<string>('');
 
-  // Pagamento, Parcelamento e Juros
   const [statusPagamento, setStatusPagamento] = useState<string>('pendente');
   const [formaPagamento, setFormaPagamento] = useState<string>('pix');
   const [parcelas, setParcelas] = useState<number>(1);
@@ -65,20 +64,33 @@ export default function ComandaDigitalOS() {
   const valorParcela = parcelas > 0 ? valorTotalComJuros / parcelas : valorTotalComJuros;
 
   useEffect(() => {
-    carregarClientesECarregamentos();
+    carregarDadosIniciais();
   }, []);
 
-  const carregarClientesECarregamentos = async () => {
+  const carregarDadosIniciais = async () => {
     try {
-      // Carrega clientes do banco para o select
       const { data: clientesData } = await supabase.from('clientes').select('id, nome, telefone');
       if (clientesData) setListaClientes(clientesData);
 
-      // Carrega histórico de O.S. (compartilhado entre funcionário e admin)
       const { data: osData } = await supabase.from('ordens_servico').select('*').order('criado_em', { ascending: false });
       if (osData) setHistoricoCliente(osData);
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
+    }
+  };
+
+  const selecionarClienteExistente = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const id = e.target.value;
+    setClienteSelecionadoId(id);
+    if (id !== 'novo') {
+      const cli = listaClientes.find(c => c.id === id);
+      if (cli) {
+        setClienteNome(cli.nome);
+        setTelefone(cli.telefone);
+      }
+    } else {
+      setClienteNome('');
+      setTelefone('');
     }
   };
 
@@ -96,17 +108,26 @@ export default function ComandaDigitalOS() {
     setItensComanda(itensComanda.filter(i => i.id !== id));
   };
 
-  const salvarOrdemServicoSupabase = async () => {
+  // Carregar O.S. existente para edição
+  const carregarOsParaEdicao = (os: OrdemServicoHistorico) => {
+    setOsEditandoId(os.id);
+    setOsCodigo(os.os_codigo);
+    setProblemaRelatado(os.problema_relatado || '');
+    setStatusPagamento(os.status_pagamento || 'pendente');
+    setMensagem(`Modo de edição ativo para a O.S. ${os.os_codigo}`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const salvarOuAtualizarOrdemServico = async () => {
     setSalvando(true);
     setMensagem('');
 
     try {
-      let clienteIdFinal = clienteSelecionadoId;
+      let clienteIdFinal = clienteSelecionadoId !== 'novo' ? clienteSelecionadoId : null;
 
-      // Se selecionou "novo", cadastra o cliente na hora e já integra ao painel de clientes
       if (clienteSelecionadoId === 'novo') {
         if (!clienteNome.trim() || !telefone.trim()) {
-          alert('Preencha o nome e o telefone do novo cliente.');
+          alert('Preencha o nome e o telefone do cliente.');
           setSalvando(false);
           return;
         }
@@ -120,7 +141,6 @@ export default function ComandaDigitalOS() {
         if (errCliente) throw errCliente;
         clienteIdFinal = novoCliente.id;
 
-        // Se informou veículo junto, cadastra na tabela de veículos
         if (modeloCarro.trim() && placa.trim()) {
           await supabase.from('veiculos').insert([{
             cliente_id: clienteIdFinal,
@@ -130,20 +150,37 @@ export default function ComandaDigitalOS() {
         }
       }
 
-      // Salva a O.S. vinculada de forma que o Admin visualize instantaneamente no painel geral
-      const { error: errOs } = await supabase.from('ordens_servico').insert([{
-        os_codigo: osCodigo,
-        cliente_id: clienteIdFinal !== 'novo' ? clienteIdFinal : null,
-        problema_relatado: problemaRelatado,
-        status_pagamento: statusPagamento,
-        forma_pagamento: `${formaPagamento}${parcelas > 1 ? ` (${parcelas}x)` : ''}`,
-        valor_total: valorTotalComJuros
-      }]);
+      if (osEditandoId) {
+        // Atualiza O.S. existente
+        const { error: errUpdate } = await supabase
+          .from('ordens_servico')
+          .update({
+            problema_relatado: problemaRelatado,
+            status_pagamento: statusPagamento,
+            forma_pagamento: `${formaPagamento}${parcelas > 1 ? ` (${parcelas}x)` : ''}`,
+            valor_total: valorTotalComJuros
+          })
+          .eq('id', osEditandoId);
 
-      if (errOs) throw errOs;
+        if (errUpdate) throw errUpdate;
+        setMensagem('Ordem de serviço atualizada com sucesso!');
+      } else {
+        // Insere nova O.S.
+        const { error: errInsert } = await supabase.from('ordens_servico').insert([{
+          os_codigo: osCodigo,
+          cliente_id: clienteIdFinal,
+          problema_relatado: problemaRelatado,
+          status_pagamento: statusPagamento,
+          forma_pagamento: `${formaPagamento}${parcelas > 1 ? ` (${parcelas}x)` : ''}`,
+          valor_total: valorTotalComJuros
+        }]);
 
-      setMensagem('Ordem de serviço e pagamento salvos e integrados ao painel do Admin com sucesso!');
-      carregarClientesECarregamentos();
+        if (errInsert) throw errInsert;
+        setMensagem('Nova ordem de serviço salva com sucesso!');
+      }
+
+      setOsEditandoId(null);
+      carregarDadosIniciais();
     } catch (err: any) {
       setMensagem('Erro ao salvar O.S.: ' + err.message);
     } finally {
@@ -156,12 +193,12 @@ export default function ComandaDigitalOS() {
       
       <div className="bg-gray-900 border border-gray-800 p-4 rounded-xl flex justify-between items-center shadow-lg print:hidden">
         <div>
-          <span className="text-xs font-bold text-yellow-500 uppercase tracking-widest">Nova Ordem de Serviço & Pagamento</span>
-          <h3 className="text-lg font-black text-white">{osCodigo}</h3>
+          <span className="text-xs font-bold text-yellow-500 uppercase tracking-widest">Gerenciamento de O.S. & Recibo</span>
+          <h3 className="text-lg font-black text-white">{osCodigo} {osEditandoId ? '(Editando)' : ''}</h3>
         </div>
         <div className="flex items-center space-x-3">
           <button onClick={() => setModoVisualizacao('interno')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${modoVisualizacao === 'interno' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
-            🔧 Visão Oficina (Integrada c/ Admin)
+            🔧 Visão Oficina
           </button>
           <button onClick={() => setModoVisualizacao('cliente')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${modoVisualizacao === 'cliente' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
             ✨ Layout Exclusivo Cliente
@@ -183,10 +220,10 @@ export default function ComandaDigitalOS() {
               <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Código O.S.</label>
               <input type="text" value={osCodigo} onChange={(e) => setOsCodigo(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-yellow-400 font-bold mb-3" />
               
-              <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Selecionar Cliente ou Cadastrar na Hora</label>
+              <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Cliente</label>
               <select 
                 value={clienteSelecionadoId} 
-                onChange={(e) => setClienteSelecionadoId(e.target.value)} 
+                onChange={selecionarClienteExistente} 
                 className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white mb-3"
               >
                 <option value="novo">+ Cadastrar Novo Cliente na Hora</option>
@@ -205,8 +242,8 @@ export default function ComandaDigitalOS() {
 
             <div>
               <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Veículo (Modelo / Placa)</label>
-              <input type="text" placeholder="Ex: Fiat Palio 1.4" value={modeloCarro} onChange={(e) => setModeloCarro(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white mb-2" />
-              <input type="text" placeholder="Placa (ABC-1234)" value={placa} onChange={(e) => setPlaca(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-2 text-xs text-white uppercase" />
+              <input type="text" placeholder="Ex: Volkswagen Golf GTI" value={modeloCarro} onChange={(e) => setModeloCarro(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white mb-2" />
+              <input type="text" placeholder="Placa (XYZ-9876)" value={placa} onChange={(e) => setPlaca(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-2 text-xs text-white uppercase" />
             </div>
 
             <div>
@@ -215,12 +252,11 @@ export default function ComandaDigitalOS() {
             </div>
           </div>
 
-          {/* Pagamento, Parcelamento e Juros Integrados */}
           <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500">Registro de Pagamento (Visível p/ Admin)</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500">Condições de Pagamento</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Status do Pagamento</label>
+                <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Status</label>
                 <select value={statusPagamento} onChange={(e) => setStatusPagamento(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white">
                   <option value="pendente">Pendente / Em Aberto</option>
                   <option value="pago">Pago / Quitado</option>
@@ -251,7 +287,6 @@ export default function ComandaDigitalOS() {
             </div>
           </div>
 
-          {/* Adicionar Serviços */}
           <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500">Serviços e Peças</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -282,13 +317,13 @@ export default function ComandaDigitalOS() {
             </div>
           </div>
 
-          <button onClick={salvarOrdemServicoSupabase} disabled={salvando} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3.5 rounded-lg cursor-pointer shadow-lg">
-            {salvando ? 'Salvando Definitivamente...' : 'Salvar O.S., Vincular ao Cliente e Sincronizar c/ Admin'}
+          <button onClick={salvarOuAtualizarOrdemServico} disabled={salvando} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3.5 rounded-lg cursor-pointer shadow-lg">
+            {salvando ? 'Salvando...' : osEditandoId ? 'Atualizar Ordem de Serviço' : 'Salvar Nova Ordem de Serviço'}
           </button>
 
-          {/* Histórico Geral Sincronizado */}
+          {/* Histórico para seleção e alteração posterior */}
           <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-white">Histórico Geral de O.S. (Banco de Dados)</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-white">Histórico de O.S. (Clique em Editar para alterar)</h4>
             <div className="space-y-2">
               {historicoCliente.map((os) => (
                 <div key={os.id} className="bg-gray-900 p-4 rounded-lg flex justify-between items-center text-xs border border-gray-800">
@@ -296,11 +331,16 @@ export default function ComandaDigitalOS() {
                     <span className="font-bold text-yellow-500">{os.os_codigo}</span>
                     <p className="text-gray-400 mt-0.5">{os.problema_relatado}</p>
                   </div>
-                  <div className="text-right">
-                    <span className="font-black text-white block">R$ {Number(os.valor_total).toFixed(2)}</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${os.status_pagamento === 'pago' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
-                      {os.status_pagamento.toUpperCase()} ({os.forma_pagamento})
-                    </span>
+                  <div className="flex items-center space-x-4">
+                    <div className="text-right">
+                      <span className="font-black text-white block">R$ {Number(os.valor_total).toFixed(2)}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${os.status_pagamento === 'pago' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                        {os.status_pagamento.toUpperCase()}
+                      </span>
+                    </div>
+                    <button onClick={() => carregarOsParaEdicao(os)} className="bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded text-gray-200 font-bold">
+                      Editar
+                    </button>
                   </div>
                 </div>
               ))}
@@ -310,6 +350,7 @@ export default function ComandaDigitalOS() {
         </div>
       )}
 
+      {/* ================= LAYOUT EXCLUSIVO PRO CLIENTE (COM NOME E CARRO) ================= */}
       {modoVisualizacao === 'cliente' && (
         <div className="bg-white text-gray-900 border border-gray-300 rounded-2xl p-8 shadow-2xl space-y-8 max-w-2xl mx-auto">
           <div className="text-center border-b border-gray-200 pb-6">
@@ -322,6 +363,14 @@ export default function ComandaDigitalOS() {
           </div>
 
           <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl text-xs">
+            <div>
+              <span className="block text-gray-400 uppercase font-semibold text-[10px]">Cliente:</span>
+              <strong className="text-gray-800 text-sm">{clienteomeFinalText(clienteNome)}</strong>
+            </div>
+            <div>
+              <span className="block text-gray-400 uppercase font-semibold text-[10px]">Veículo:</span>
+              <strong className="text-gray-800 text-sm">{modeloCarro ? `${modeloCarro} (${placa || 'Sem placa'})` : 'Veículo não informado'}</strong>
+            </div>
             <div>
               <span className="block text-gray-400 uppercase font-semibold text-[10px]">Ordem de Serviço:</span>
               <strong className="text-gray-800 text-sm">{osCodigo}</strong>
@@ -375,4 +424,9 @@ export default function ComandaDigitalOS() {
 
     </div>
   );
+}
+
+// Função auxiliar interna para garantir exibição do nome do cliente
+function clienteomeFinalText(nome: string) {
+  return nome.trim() !== '' ? nome : 'Cliente Balcão';
 }
