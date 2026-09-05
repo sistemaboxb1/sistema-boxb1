@@ -13,7 +13,6 @@ export default function Home() {
   const [carregandoSessao, setCarregandoSessao] = useState<boolean>(true);
 
   useEffect(() => {
-    // Verifica se já existe uma sessão ativa no Supabase ao carregar a página
     const verificarSessaoExistente = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -22,18 +21,22 @@ export default function Home() {
           const email = session.user.email || '';
           setEmailUsuario(email);
 
-          // Busca o perfil/cargo real na tabela 'perfis'
-          const { data: perfilData } = await supabase
-            .from('perfis')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-
-          if (perfilData) {
-            setCargoUsuario(perfilData.role as 'admin' | 'funcionario');
+          // REGRA DE OURO: Se o e-mail for do Izaias, força imediatamente o cargo de admin
+          if (email.toLowerCase().includes('izaias')) {
+            setCargoUsuario('admin');
           } else {
-            // Fallback de segurança caso o perfil não venha preenchido
-            setCargoUsuario(email.includes('izaias') ? 'admin' : 'funcionario');
+            // Caso contrário, busca na tabela perfis do Supabase
+            const { data: perfilData } = await supabase
+              .from('perfis')
+              .select('role')
+              .eq('id', session.user.id)
+              .single();
+
+            if (perfilData && perfilData.role === 'admin') {
+              setCargoUsuario('admin');
+            } else {
+              setCargoUsuario('funcionario');
+            }
           }
           
           setSessaoAtiva(true);
@@ -49,8 +52,15 @@ export default function Home() {
   }, []);
 
   const lidarComLoginSucesso = (role: 'admin' | 'funcionario', email: string) => {
-    setCargoUsuario(role);
     setEmailUsuario(email);
+    
+    // Força admin se o e-mail pertencer ao Izaias
+    if (email.toLowerCase().includes('izaias')) {
+      setCargoUsuario('admin');
+    } else {
+      setCargoUsuario(role);
+    }
+    
     setSessaoAtiva(true);
   };
 
@@ -76,16 +86,15 @@ export default function Home() {
     );
   }
 
-  // Se não estiver logado, exibe a tela de Login
   if (!sessaoAtiva) {
     return <Login onLoginSuccess={lidarComLoginSucesso} />;
   }
 
-  // Se o usuário logado for 'admin' (Izaias), renderiza exclusivamente o painel de diretoria completo
+  // Renderização blindada: se for admin (Izaias), exibe obrigatoriamente o painel completo da diretoria
   if (cargoUsuario === 'admin') {
     return <AdminDashboard emailUsuario={emailUsuario} onLogout={lidarComLogout} />;
   }
 
-  // Se for 'funcionario', renderiza apenas o painel operacional restrito (sem financeiro ou contador)
+  // Caso contrário, exibe o painel do funcionário
   return <FuncionarioDashboard emailUsuario={emailUsuario} onLogout={lidarComLogout} />;
 }
