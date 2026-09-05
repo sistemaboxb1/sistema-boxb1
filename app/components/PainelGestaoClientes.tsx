@@ -1,0 +1,235 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+
+interface OrdemServicoItem {
+  id: string;
+  os_codigo: string;
+  problema_relatado: string;
+  valor_total: number;
+  status_pagamento: string;
+  forma_pagamento: string;
+  criado_em: string;
+}
+
+interface ClienteCompleto {
+  id: string;
+  nome: string;
+  telefone: string;
+  ordens_servico: OrdemServicoItem[];
+}
+
+export default function PainelGestaoClientes() {
+  const [clientes, setClientes] = useState<ClienteCompleto[]>([]);
+  const [clienteSelecionado, setClienteSelecionado] = useState<ClienteCompleto | null>(null);
+  const [carregando, setCarregando] = useState<boolean>(true);
+  const [mensagem, setMensagem] = useState<string>('');
+
+  // Estados de Edição
+  const [editandoClienteId, setEditandoClienteId] = useState<string | null>(null);
+  const [novoNomeCliente, setNovoNomeCliente] = useState<string>('');
+  const [novoTelefoneCliente, setNovoTelefoneCliente] = useState<string>('');
+
+  const [editandoOsId, setEditandoOsId] = useState<string | null>(null);
+  const [novoProblemaOs, setNovoProblemaOs] = useState<string>('');
+  const [novoValorOs, setNovoValorOs] = useState<string>('');
+
+  useEffect(() => {
+    carregarClientes();
+  }, []);
+
+  const carregarClientes = async () => {
+    setCarregando(true);
+    try {
+      const { data: cliData, error: errCli } = await supabase
+        .from('clientes')
+        .select('*')
+        .order('nome', { ascending: true });
+
+      if (errCli) throw errCli;
+
+      const listaMapeada = await Promise.all(
+        (cliData || []).map(async (cli) => {
+          const { data: osData } = await supabase
+            .from('ordens_servico')
+            .select('*')
+            .eq('cliente_id', cli.id)
+            .order('criado_em', { ascending: false });
+
+          return {
+            ...cli,
+            ordens_servico: osData || []
+          };
+        })
+      );
+
+      setClientes(listaMapeada);
+      if (clienteSelecionado) {
+        const atualizado = listaMapeada.find(c => c.id === clienteSelecionado.id);
+        if (atualizado) setClienteSelecionado(atualizado);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar clientes:', err);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const salvarEdicaoCliente = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('clientes')
+        .update({ nome: novoNomeCliente, telefone: novoTelefoneCliente })
+        .eq('id', id);
+
+      if (error) throw error;
+      setMensagem('Dados do cliente atualizados com sucesso!');
+      setEditandoClienteId(null);
+      carregarClientes();
+    } catch (err: any) {
+      setMensagem('Erro ao atualizar cliente: ' + err.message);
+    }
+  };
+
+  const salvarEdicaoOs = async (osId: string) => {
+    try {
+      const { error } = await supabase
+        .from('ordens_servico')
+        .update({ 
+          problema_relatado: novoProblemaOs, 
+          valor_total: parseFloat(novoValorOs) || 0 
+        })
+        .eq('id', osId);
+
+      if (error) throw error;
+      setMensagem('Ordem de serviço atualizada com sucesso!');
+      setEditandoOsId(null);
+      carregarClientes();
+    } catch (err: any) {
+      setMensagem('Erro ao atualizar O.S.: ' + err.message);
+    }
+  };
+
+  if (carregando) {
+    return <div className="text-white text-xs p-6">Carregando lista de clientes...</div>;
+  }
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl space-y-6">
+      <div className="flex justify-between items-center border-b border-gray-800 pb-4">
+        <div>
+          <h3 className="text-xl font-black text-white">Lista de Clientes & Histórico de O.S.</h3>
+          <p className="text-xs text-gray-400 mt-1">Clique em um cliente para ver e editar suas Ordens de Serviço e dados cadastrais.</p>
+        </div>
+        <button onClick={carregarClientes} className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-xs py-2 px-4 rounded-lg cursor-pointer">
+          🔄 Atualizar
+        </button>
+      </div>
+
+      {mensagem && (
+        <div className="bg-gray-950 p-3 rounded border border-gray-800 text-xs text-yellow-400 font-semibold">
+          {mensagem}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Coluna Lateral com a Lista de Clientes */}
+        <div className="md:col-span-1 bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-2 max-h-[600px] overflow-y-auto">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500 mb-3">Todos os Clientes ({clientes.length})</h4>
+          {clientes.map((cli) => (
+            <div 
+              key={cli.id}
+              onClick={() => setClienteSelecionado(cli)}
+              className={`p-3 rounded-xl cursor-pointer transition-all border ${
+                clienteSelecionado?.id === cli.id ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-gray-900 border-gray-800 text-gray-300 hover:bg-gray-800'
+              }`}
+            >
+              <h5 className="font-bold text-xs">{cli.nome}</h5>
+              <span className="text-[11px] text-gray-400 block">{cli.telefone}</span>
+              <span className="text-[10px] text-yellow-400 font-semibold mt-1 block">{cli.ordens_servico.length} O.S. vinculada(s)</span>
+            </div>
+          ))}
+          {clientes.length === 0 && <p className="text-xs text-gray-500 text-center py-4">Nenhum cliente cadastrado.</p>}
+        </div>
+
+        {/* Coluna Principal com os Detalhes do Cliente Selecionado e O.S. */}
+        <div className="md:col-span-2 bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-6">
+          {clienteSelecionado ? (
+            <div className="space-y-6">
+              
+              {/* Dados do Cliente com Opção de Editar */}
+              <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex justify-between items-center">
+                {editandoClienteId === clienteSelecionado.id ? (
+                  <div className="space-y-2 w-full">
+                    <input type="text" value={novoNomeCliente} onChange={(e) => setNovoNomeCliente(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-1 text-xs text-white" />
+                    <input type="text" value={novoTelefoneCliente} onChange={(e) => setNovoTelefoneCliente(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-1 text-xs text-white" />
+                    <button onClick={() => salvarEdicaoCliente(clienteSelecionado.id)} className="bg-green-600 text-white px-3 py-1 rounded text-xs font-bold">Salvar Cliente</button>
+                  </div>
+                ) : (
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-gray-400 block">Cliente Selecionado</span>
+                    <h3 className="text-lg font-black text-white">{clienteSelecionado.nome}</h3>
+                    <p className="text-xs text-gray-400">Telefone: {clienteSelecionado.telefone}</p>
+                  </div>
+                )}
+
+                {editandoClienteId !== clienteSelecionado.id && (
+                  <button onClick={() => { setEditandoClienteId(clienteSelecionado.id); setNovoNomeCliente(clienteSelecionado.nome); setNovoTelefoneCliente(clienteSelecionado.telefone); }} className="bg-gray-800 hover:bg-gray-700 text-xs px-3 py-1.5 rounded font-bold text-gray-200">
+                    Editar Cliente
+                  </button>
+                )}
+              </div>
+
+              {/* Lista de Ordens de Serviço do Cliente com Opção de Edição */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500">Ordens de Serviço de {clienteSelecionado.nome}</h4>
+                
+                {clienteSelecionado.ordens_servico.length > 0 ? (
+                  clienteSelecionado.ordens_servico.map((os) => (
+                    <div key={os.id} className="bg-gray-900 p-4 rounded-xl border border-gray-800 space-y-3 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-yellow-400">{os.os_codigo}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${os.status_pagamento === 'pago' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                          {os.status_pagamento.toUpperCase()} ({os.forma_pagamento})
+                        </span>
+                      </div>
+
+                      {editandoOsId === os.id ? (
+                        <div className="space-y-2 pt-2 border-t border-gray-800">
+                          <textarea value={novoProblemaOs} onChange={(e) => setNovoProblemaOs(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-white" rows={2} />
+                          <input type="number" step="0.01" value={novoValorOs} onChange={(e) => setNovoValorOs(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-1 text-xs text-white" />
+                          <button onClick={() => salvarEdicaoOs(os.id)} className="bg-green-600 text-white px-3 py-1 rounded text-xs font-bold">Salvar O.S.</button>
+                        </div>
+                      ) : (
+                        <div className="flex justify-between items-end pt-2 border-t border-gray-800">
+                          <div>
+                            <p className="text-gray-300">{os.problema_relatado}</p>
+                            <span className="text-[10px] text-gray-500 mt-1 block">Criado em: {new Date(os.criado_em).toLocaleDateString()}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-black text-white text-sm block">R$ {Number(os.valor_total).toFixed(2)}</span>
+                            <button onClick={() => { setEditandoOsId(os.id); setNovoProblemaOs(os.problema_relatado); setNovoValorOs(os.valor_total.toString()); }} className="text-blue-400 hover:text-blue-300 font-bold mt-1 block">
+                              Editar O.S.
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-500 italic py-4 text-center">Este cliente ainda não possui ordens de serviço cadastradas.</p>
+                )}
+              </div>
+
+            </div>
+          ) : (
+            <div className="text-center py-20 text-gray-500 text-xs">
+              Selecione um cliente na lista ao lado para gerenciar suas Ordens de Serviço.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
