@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import ComandaDigitalOS from './ComandaDigitalOS';
 import PainelClientesCarros from './PainelClientesCarros';
 import PainelBoletosPecas from './PainelBoletosPecas';
+import PainelGestaoClientes from './PainelGestaoClientes';
 import { supabase } from '../lib/supabase';
 
 interface FuncionarioDashboardProps {
@@ -11,17 +12,8 @@ interface FuncionarioDashboardProps {
   onLogout: () => void;
 }
 
-interface PagamentoRegistro {
-  id: string;
-  osId: string;
-  cliente: string;
-  metodo: string;
-  valor: number;
-  data: string;
-}
-
 export default function FuncionarioDashboard({ emailUsuario, onLogout }: FuncionarioDashboardProps) {
-  const [abaAtiva, setAbaAtiva] = useState<'comanda' | 'clientes' | 'pagamentos' | 'boletos' | 'pecas-lucro'>('comanda');
+  const [abaAtiva, setAbaAtiva] = useState<'comanda' | 'clientes' | 'lista-clientes' | 'pagamentos' | 'boletos' | 'pecas-lucro'>('comanda');
 
   // Estados para o cadastro de pagamentos integrados
   const [osVinculada, setOsVinculada] = useState<string>('');
@@ -30,11 +22,17 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
   const [valorPagamento, setValorPagamento] = useState<string>('');
   const [mensagemPagto, setMensagemPagto] = useState<string>('');
 
-  // Estados para cadastro individual de peça e lucro pelo funcionário
+  // Estados para cadastro de peça com cálculo automático de porcentagem
   const [nomePeca, setNomePeca] = useState<string>('');
   const [custoPeca, setCustoPeca] = useState<string>('');
-  const [vendaPeca, setVendaPeca] = useState<string>('');
+  const [porcentagemLucro, setPorcentagemLucro] = useState<string>('30');
   const [mensagemPeca, setMensagemPeca] = useState<string>('');
+
+  // Cálculos automáticos da peça
+  const custoNum = parseFloat(custoPeca) || 0;
+  const percNum = parseFloat(porcentagemLucro) || 0;
+  const valorVendaCalculado = custoNum + (custoNum * (percNum / 100));
+  const lucroUnitarioCalculado = valorVendaCalculado - custoNum;
 
   const registrarPagamentoIntegrado = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +43,7 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
       }).eq('os_codigo', osVinculada.trim());
 
       if (error) throw error;
-      setMensagemPagto('Pagamento registrado e integrado à O.S. e ao banco de clientes com sucesso!');
+      setMensagemPagto('Pagamento registrado e integrado à O.S. e ao painel do Admin com sucesso!');
       setOsVinculada('');
       setNomeClientePagto('');
       setValorPagamento('');
@@ -54,27 +52,30 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
     }
   };
 
-  const registrarPecaComLucro = async (e: React.FormEvent) => {
+  const registrarPecaComPorcentagem = async (e: React.FormEvent) => {
     e.preventDefault();
-    const custo = parseFloat(custoPeca) || 0;
-    const venda = parseFloat(vendaPeca) || 0;
-    const lucroUnitario = venda - custo;
+    if (custoNum <= 0) {
+      setMensagemPeca('Informe um preço de custo válido.');
+      return;
+    }
 
     try {
-      const { error } = await supabase.from('ordens_servico').insert([{
-        os_codigo: `PEC-${Math.floor(100 + Math.random() * 900)}`,
-        problema_relatado: `Peça: ${nomePeca} (Custo: R$ ${custo} | Venda: R$ ${venda} | Lucro: R$ ${lucroUnitario})`,
-        valor_total: venda,
-        status_pagamento: 'pago'
+      // Salva na tabela isolada pecas_cadastradas (sincronizada com o painel do Admin Izaias)
+      const { error } = await supabase.from('pecas_cadastradas').insert([{
+        nome_peca: nomePeca.trim(),
+        preco_custo: custoNum,
+        preco_venda: valorVendaCalculado,
+        lucro_unitario: lucroUnitarioCalculado
       }]);
 
       if (error) throw error;
-      setMensagemPeca(`Peça cadastrada! Lucro desta unidade: R$ ${lucroUnitario.toFixed(2)} (Registrado no sistema).`);
+      
+      setMensagemPeca(`Peça cadastrada! Venda: R$ ${valorVendaCalculado.toFixed(2)} (${percNum}% de margem). Sincronizado com o Admin!`);
       setNomePeca('');
       setCustoPeca('');
-      setVendaPeca('');
+      setPorcentagemLucro('30');
     } catch (err: any) {
-      setMensagemPeca('Erro ao registrar peça: ' + err.message);
+      setMensagemPeca('Erro ao cadastrar peça: ' + err.message);
     }
   };
 
@@ -113,6 +114,15 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
             </button>
 
             <button
+              onClick={() => setAbaAtiva('lista-clientes')}
+              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
+                abaAtiva === 'lista-clientes' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <span>👥 Lista de Clientes & O.S.</span>
+            </button>
+
+            <button
               onClick={() => setAbaAtiva('pagamentos')}
               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
                 abaAtiva === 'pagamentos' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
@@ -136,7 +146,7 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
                 abaAtiva === 'pecas-lucro' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <span>📦 Peça & Lucro Unitário</span>
+              <span>📦 Peça & Margem Unitária</span>
             </button>
           </nav>
         </div>
@@ -159,13 +169,14 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
         <header className="h-16 bg-gray-900 border-b border-gray-800 px-6 flex items-center justify-between">
           <span className="text-sm font-bold uppercase tracking-wider text-gray-400">Pista / Atendimento Técnico</span>
           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
-            🔧 Operacional Restrito (Sem Visão de Lucro Total)
+            🔧 Sincronizado com Admin (Izaias)
           </span>
         </header>
 
         <div className="p-8 overflow-y-auto space-y-6">
           {abaAtiva === 'comanda' && <ComandaDigitalOS />}
           {abaAtiva === 'clientes' && <PainelClientesCarros />}
+          {abaAtiva === 'lista-clientes' && <PainelGestaoClientes />}
           
           {abaAtiva === 'pagamentos' && (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-xl space-y-6">
@@ -240,8 +251,8 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
           {abaAtiva === 'pecas-lucro' && (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-xl space-y-6">
               <div>
-                <h3 className="text-xl font-black text-white">Cadastro de Peça Vendida & Margem Unitária</h3>
-                <p className="text-xs text-gray-400 mt-1">Informe o custo de aquisição e o preço de venda. O sistema calcula a margem desta peça específica sem exibir o lucro total da oficina.</p>
+                <h3 className="text-xl font-black text-white">Cadastro de Peça com Porcentagem de Lucro</h3>
+                <p className="text-xs text-gray-400 mt-1">Informe o custo e a porcentagem desejada. O sistema calcula o preço de venda e sincroniza instantaneamente com o painel do Admin Izaias.</p>
               </div>
 
               {mensagemPeca && (
@@ -250,7 +261,7 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
                 </div>
               )}
 
-              <form onSubmit={registrarPecaComLucro} className="space-y-4 bg-gray-950 p-6 rounded-xl border border-gray-800">
+              <form onSubmit={registrarPecaComPorcentagem} className="space-y-4 bg-gray-950 p-6 rounded-xl border border-gray-800">
                 <div>
                   <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Nome / Descrição da Peça</label>
                   <input 
@@ -276,20 +287,34 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Preço de Venda ao Cliente (R$)</label>
+                    <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Porcentagem de Lucro (%)</label>
                     <input 
                       type="number" 
-                      step="0.01" 
-                      value={vendaPeca} 
-                      onChange={(e) => setVendaPeca(e.target.value)} 
-                      placeholder="0.00"
+                      step="0.1" 
+                      value={porcentagemLucro} 
+                      onChange={(e) => setPorcentagemLucro(e.target.value)} 
+                      placeholder="Ex: 30"
                       className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
                       required 
                     />
                   </div>
                 </div>
+
+                {custoNum > 0 && (
+                  <div className="bg-gray-900 border border-gray-800 p-4 rounded-lg flex justify-between items-center text-xs">
+                    <div>
+                      <span className="text-gray-400 block">Preço de Venda Calculado ({percNum}%):</span>
+                      <strong className="text-green-400 text-sm">R$ {valorVendaCalculado.toFixed(2)}</strong>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-gray-400 block">Lucro Unitário:</span>
+                      <strong className="text-yellow-400 text-sm">R$ {lucroUnitarioCalculado.toFixed(2)}</strong>
+                    </div>
+                  </div>
+                )}
+
                 <button type="submit" className="w-full bg-green-600 hover:bg-green-500 text-white font-bold text-xs py-3 rounded-lg cursor-pointer">
-                  Salvar Peça e Registrar Lucro Unitário
+                  Salvar Peça e Sincronizar com o Admin Izaias
                 </button>
               </form>
             </div>

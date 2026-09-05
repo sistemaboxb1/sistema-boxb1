@@ -1,93 +1,122 @@
+// app/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import Login from './components/Login';
-import AdminDashboard from './components/AdminDashboard';
 import FuncionarioDashboard from './components/FuncionarioDashboard';
 
 export default function Home() {
-  const [sessaoAtiva, setSessaoAtiva] = useState<boolean>(false);
-  const [cargoUsuario, setCargoUsuario] = useState<'admin' | 'funcionario' | null>(null);
-  const [emailUsuario, setEmailUsuario] = useState<string>('');
-  const [carregandoSessao, setCarregandoSessao] = useState<boolean>(true);
+  const [sessao, setSessao] = useState<any>(null);
+  const [emailInput, setEmailInput] = useState<string>('');
+  const [senhaInput, setSenhaInput] = useState<string>('');
+  const [carregando, setCarregando] = useState<boolean>(true);
+  const [erroLogin, setErroLogin] = useState<string>('');
 
   useEffect(() => {
-    const verificarSessaoExistente = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session && session.user) {
-          const email = session.user.email || '';
-          setEmailUsuario(email);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSessao(session);
+      setCarregando(false);
+    });
 
-          if (email.toLowerCase().includes('izaias')) {
-            setCargoUsuario('admin');
-          } else {
-            const { data: perfilData } = await supabase
-              .from('perfis')
-              .select('role')
-              .eq('id', session.user.id)
-              .single();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSessao(session);
+    });
 
-            if (perfilData && perfilData.role === 'admin') {
-              setCargoUsuario('admin');
-            } else {
-              setCargoUsuario('funcionario');
-            }
-          }
-          
-          setSessaoAtiva(true);
-        }
-      } catch (err) {
-        console.error('Erro ao verificar sessão:', err);
-      } finally {
-        setCarregandoSessao(false);
-      }
-    };
-
-    verificarSessaoExistente();
+    return () => subscription.unsubscribe();
   }, []);
 
-  const lidarComLoginSucesso = (role: 'admin' | 'funcionario', email: string) => {
-    setEmailUsuario(email);
-    if (email.toLowerCase().includes('izaias')) {
-      setCargoUsuario('admin');
-    } else {
-      setCargoUsuario(role);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErroLogin('');
+    setCarregando(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: emailInput.trim(),
+        password: senhaInput,
+      });
+
+      if (error) throw error;
+      setSessao(data.session);
+    } catch (err: any) {
+      setErroLogin(err.message || 'Erro ao fazer login. Verifique suas credenciais.');
+    } finally {
+      setCarregando(false);
     }
-    setSessaoAtiva(true);
   };
 
-  const lidarComLogout = async () => {
+  const handleLogout = async () => {
     await supabase.auth.signOut();
-    setSessaoAtiva(false);
-    setCargoUsuario(null);
-    setEmailUsuario('');
-    localStorage.removeItem('boxb1_user');
+    setSessao(null);
   };
 
-  if (carregandoSessao) {
+  if (carregando) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-950 text-white">
-        <div className="flex items-center space-x-3">
-          <svg className="animate-spin h-6 w-6 text-yellow-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span className="text-sm font-semibold tracking-wider">Carregando Sistema BOXB1...</span>
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white text-xs">
+        Carregando sistema BOXB1...
+      </div>
+    );
+  }
+
+  if (!sessao) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6 text-white">
+        <div className="bg-gray-900 border border-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md space-y-6">
+          <div>
+            <h1 className="text-3xl font-black tracking-wider text-white">
+              BOX<span className="text-yellow-500">B1</span>
+            </h1>
+            <p className="text-xs text-gray-400 mt-1">Sistema de Gestão para Oficina Mecânica</p>
+          </div>
+
+          {erroLogin && (
+            <div className="bg-red-950/40 border border-red-800/60 p-3 rounded-lg text-xs text-red-300 font-semibold">
+              {erroLogin}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">E-mail de Acesso</label>
+              <input
+                type="email"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="seu-email@boxb1.com"
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2.5 text-xs text-white"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Senha</label>
+              <input
+                type="password"
+                value={senhaInput}
+                onChange={(e) => setSenhaInput(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2.5 text-xs text-white"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3 rounded-lg transition-all cursor-pointer shadow-lg"
+            >
+              Entrar no Sistema
+            </button>
+          </form>
         </div>
       </div>
     );
   }
 
-  if (!sessaoAtiva) {
-    return <Login onLoginSuccess={lidarComLoginSucesso} />;
-  }
+  const emailUsuario = sessao.user?.email || '';
 
-  if (cargoUsuario === 'admin') {
-    return <AdminDashboard emailUsuario={emailUsuario} onLogout={lidarComLogout} />;
-  }
-
-  return <FuncionarioDashboard emailUsuario={emailUsuario} onLogout={lidarComLogout} />;
+  return (
+    <FuncionarioDashboard emailUsuario={emailUsuario} onLogout={handleLogout} />
+  );
 }
