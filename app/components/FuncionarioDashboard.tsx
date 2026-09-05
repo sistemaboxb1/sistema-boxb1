@@ -1,169 +1,155 @@
 'use client';
 
 import React, { useState } from 'react';
-import AdminFinanceiro from './AdminFinanceiro';
-import RelatorioContadorCartao from './RelatorioContadorCartao';
+import ComandaDigitalOS from './ComandaDigitalOS';
+import PainelClientesCarros from './PainelClientesCarros';
 
-interface AdminDashboardProps {
+interface FuncionarioDashboardProps {
   emailUsuario: string;
   onLogout: () => void;
 }
 
-export default function AdminDashboard({ emailUsuario, onLogout }: AdminDashboardProps) {
-  // Estados para gerenciar as abas especializadas da diretoria
-  const [abaAtiva, setAbaAtiva] = useState<'visao-geral' | 'financeiro' | 'contador' | 'equipe' | 'configuracoes'>('visao-geral');
+export default function FuncionarioDashboard({ emailUsuario, onLogout }: FuncionarioDashboardProps) {
+  // Estados para gerenciar as abas especializadas do painel operacional do funcionário
+  const [abaAtiva, setAbaAtiva] = useState<'comanda' | 'clientes' | 'historico' | 'suporte'>('comanda');
 
   return (
     <div className="flex min-h-screen bg-gray-950 text-white">
       
-      {/* Barra Lateral de Navegação (Sidebar) */}
-      <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col justify-between hidden md:flex">
+      {/* Barra Lateral de Navegação (Sidebar do Funcionário) */}
+      <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col justify-between hidden md:flex shadow-xl">
         <div>
           {/* Logo do Sistema BOXB1 na Lateral */}
           <div className="p-6 border-b border-gray-800">
             <h1 className="text-2xl font-black tracking-wider text-white">
               BOX<span className="text-yellow-500">B1</span>
             </h1>
-            <p className="text-xs font-semibold text-yellow-500/80 uppercase tracking-widest mt-1">
-              Painel Diretoria (Admin)
+            <p className="text-xs font-semibold text-blue-400 uppercase tracking-widest mt-1">
+              Painel Operacional (Funcionário)
             </p>
           </div>
 
-          {/* Menu de Opções Modulares */}
+          {/* Menu de Opções Modulares Detalhado */}
           <nav className="p-4 space-y-2">
             <button
-              onClick={() => setAbaAtiva('visao-geral')}
+              onClick={() => setAbaAtiva('comanda')}
               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'visao-geral' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                abaAtiva === 'comanda' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <span>📊 Visão Geral</span>
+              <span>📋 Comanda Digital & O.S.</span>
             </button>
 
             <button
-              onClick={() => setAbaAtiva('financeiro')}
+              onClick={() => setAbaAtiva('clientes')}
               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'financeiro' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                abaAtiva === 'clientes' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <span>💰 Caixa & Lançamentos</span>
+              <span>🚗 Cadastrar Cliente & Carro</span>
             </button>
 
             <button
-              onClick={() => setAbaAtiva('contador')}
+              onClick={() => setAbaAtiva('historico')}
               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'contador' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                abaAtiva === 'historico' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <span>📑 Relatório Fiscal (Contador)</span>
+              <span>🔍 Histórico da Pista</span>
             </button>
 
             <button
-              onClick={() => setAbaAtiva('equipe')}
+              onClick={() => setAbaAtiva('suporte')}
               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'equipe' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                abaAtiva === 'suporte' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <span>👥 Gestão de Equipe</span>
-            </button>
-
-            <button
-              onClick={() => setAbaAtiva('configuracoes')}
-              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'configuracoes' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-              }`}
-            >
-              <span>⚙️ Configurações</span>
+              <span>🛠️ Manuais & Suporte</span>
             </button>
           </nav>
         </div>
 
-        {/* Rodapé da Sidebar com Identificação do Gestor */}
+        {/* Rodapé da Sidebar com Identificação do Operador */}
         <div className="p-4 border-t border-gray-800 bg-gray-950/40">
           <div className="text-xs text-gray-400 mb-2 truncate">
-            Logado como: <strong className="text-gray-200">{emailUsuario}</strong>
+            Funcionário: <strong className="text-gray-200">{emailUsuario}</strong>
           </div>
           <button
             onClick={onLogout}
-            className="w-full bg-red-600/20 hover:bg-red-600/30 border border-red-700/50 text-red-300 text-xs font-bold py-2 px-3 rounded-lg transition-colors cursor-pointer text-center"
+            className="w-full bg-red-600/25 hover:bg-red-600/40 border border-red-700/50 text-red-300 text-xs font-bold py-2 px-3 rounded-lg transition-colors cursor-pointer text-center shadow-inner"
           >
             Encerrar Sessão
           </button>
         </div>
       </aside>
 
-      {/* Conteúdo Principal da Página */}
+      {/* Conteúdo Principal da Página Operacional */}
       <main className="flex-1 flex flex-col min-w-0">
         
         {/* Barra Superior */}
         <header className="h-16 bg-gray-900 border-b border-gray-800 px-6 flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <span className="text-sm font-bold uppercase tracking-wider text-gray-400">Módulo Administrativo Master</span>
+            <span className="text-sm font-bold uppercase tracking-wider text-gray-400">Pista / Atendimento Técnico Automotivo</span>
           </div>
           <div className="flex items-center space-x-4">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
-              ⚡ Modo Gerencial Ativo
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-sm">
+              🔧 Operacional Ativo
             </span>
           </div>
         </header>
 
-        {/* Área Dinâmica baseada na Aba Selecionada */}
+        {/* Área Dinâmica baseada na Aba Selecionada com Extensividade */}
         <div className="p-8 overflow-y-auto space-y-6">
           
-          {abaAtiva === 'visao-geral' && (
+          {abaAtiva === 'comanda' && <ComandaDigitalOS />}
+
+          {abaAtiva === 'clientes' && <PainelClientesCarros />}
+
+          {abaAtiva === 'historico' && (
             <div className="space-y-6">
-              <div className="bg-gradient-to-r from-gray-900 to-gray-900/60 border border-gray-800 rounded-2xl p-6 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                  <h2 className="text-2xl font-black text-white">Olá, Izaias. Bem-vindo ao BOXB1!</h2>
-                  <p className="text-sm text-gray-400 mt-1">O sistema está operando perfeitamente e integrado ao Supabase.</p>
-                </div>
-                <div className="bg-blue-600/10 border border-blue-500/20 px-4 py-2 rounded-xl text-blue-400 text-xs font-semibold">
-                  Oficina Automotiva Autorizada
-                </div>
+              <div className="bg-gradient-to-r from-gray-900 to-gray-900/60 border border-gray-800 rounded-2xl p-6 shadow-lg">
+                <h2 className="text-2xl font-black text-white">Histórico de Ordens da Pista</h2>
+                <p className="text-sm text-gray-400 mt-1">Acompanhe o andamento dos veículos que passaram pela oficina mecânica do BOXB1.</p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-md">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Ordens em Andamento</p>
-                  <p className="text-3xl font-black text-white mt-2">12</p>
-                  <span className="text-xs text-blue-400 mt-2 inline-block">↗ 4 finalizadas hoje</span>
-                </div>
-
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-md">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Faturamento do Dia</p>
-                  <p className="text-3xl font-black text-yellow-500 mt-2">R$ 3.450</p>
-                  <span className="text-xs text-gray-500 mt-2 inline-block">Meta diária: R$ 3.000</span>
-                </div>
-
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-md">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Peças em Estoque Baixo</p>
-                  <p className="text-3xl font-black text-red-400 mt-2">3</p>
-                  <span className="text-xs text-red-500 mt-2 inline-block">⚠️ Requer reposição</span>
-                </div>
-
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-md">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Funcionários Ativos</p>
-                  <p className="text-3xl font-black text-white mt-2">5</p>
-                  <span className="text-xs text-green-400 mt-2 inline-block">🟢 Todos presentes</span>
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl">
+                <h3 className="text-lg font-bold text-white mb-4">Veículos Concluídos e em Andamento na Semana</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-gray-400">
+                    <thead className="bg-gray-950 uppercase text-gray-300 border-b border-gray-800">
+                      <tr>
+                        <th className="px-4 py-3">O.S. Ref</th>
+                        <th className="px-4 py-3">Cliente / Veículo</th>
+                        <th className="px-4 py-3">Placa</th>
+                        <th className="px-4 py-3">Status Atual</th>
+                        <th className="px-4 py-3">Data Chegada</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      <tr className="hover:bg-gray-950/50">
+                        <td className="px-4 py-4 font-bold text-white">OS-2026-089</td>
+                        <td className="px-4 py-4 text-white">Carlos Eduardo (Golf GTI)</td>
+                        <td className="px-4 py-4 font-mono text-yellow-500">XYZ-9876</td>
+                        <td className="px-4 py-4"><span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 font-bold">Em Manutenção</span></td>
+                        <td className="px-4 py-4">05/09/2026</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
           )}
 
-          {abaAtiva === 'financeiro' && <AdminFinanceiro />}
-          {abaAtiva === 'contador' && <RelatorioContadorCartao />}
-
-          {abaAtiva === 'equipe' && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-lg">
-              <h3 className="text-lg font-bold text-white mb-4">Gestão de Equipe e Permissões</h3>
-              <p className="text-sm text-gray-400">Módulo de controle de acessos dos mecânicos em desenvolvimento.</p>
-            </div>
-          )}
-
-          {abaAtiva === 'configuracoes' && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-lg">
-              <h3 className="text-lg font-bold text-white mb-4">Configurações Avançadas</h3>
-              <p className="text-sm text-gray-400">Parâmetros do sistema e backups em nuvem.</p>
+          {abaAtiva === 'suporte' && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-xl space-y-4">
+              <h3 className="text-xl font-black text-white">Manuais Técnicos e Orientações Operacionais</h3>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Bem-vindo ao canal de suporte interno do BOXB1. Utilize as ferramentas de comanda digital para registrar todas as peças aplicadas e serviços executados na pista. Lembre-se de preencher corretamente o odômetro, o ano e a placa do veículo para manter o histórico do cliente sincronizado com o painel administrativo da diretoria.
+              </p>
+              <div className="bg-gray-950 p-4 rounded-xl border border-gray-800 text-xs text-gray-400 space-y-2">
+                <p><strong>• Regra 1:</strong> Sempre atualize a comanda digital caso haja inclusão de novas peças de revendedores.</p>
+                <p><strong>• Regra 2:</strong> Emita o PDF para o cliente acompanhar os valores detalhados de cada serviço.</p>
+              </div>
             </div>
           )}
 

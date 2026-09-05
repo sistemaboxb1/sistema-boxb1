@@ -3,6 +3,9 @@
 import React, { useState } from 'react';
 import AdminFinanceiro from './AdminFinanceiro';
 import RelatorioContadorCartao from './RelatorioContadorCartao';
+import AdminFinanceiroMaster from './AdminFinanceiroMaster';
+import PainelBoletosPecas from './PainelBoletosPecas';
+import PainelClientesCarros from './PainelClientesCarros';
 
 interface AdminDashboardProps {
   emailUsuario: string;
@@ -10,8 +13,8 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboard({ emailUsuario, onLogout }: AdminDashboardProps) {
-  // Estados para gerenciar as abas especializadas da diretoria
-  const [abaAtiva, setAbaAtiva] = useState<'visao-geral' | 'financeiro' | 'contador' | 'equipe' | 'configuracoes'>('visao-geral');
+  // Estados para gerenciar as abas especializadas da diretoria, preservando todas as abas originais e adicionando as novas
+  const [abaAtiva, setAbaAtiva] = useState<'visao-geral' | 'financeiro' | 'financeiro-master' | 'boletos-pecas' | 'clientes-carros' | 'contador' | 'equipe' | 'configuracoes'>('visao-geral');
 
   return (
     <div className="flex min-h-screen bg-gray-950 text-white">
@@ -47,6 +50,33 @@ export default function AdminDashboard({ emailUsuario, onLogout }: AdminDashboar
               }`}
             >
               <span>💰 Caixa & Lançamentos</span>
+            </button>
+
+            <button
+              onClick={() => setAbaAtiva('financeiro-master')}
+              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
+                abaAtiva === 'financeiro-master' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <span>💎 Financeiro Master & Lucro de Peças</span>
+            </button>
+
+            <button
+              onClick={() => setAbaAtiva('boletos-pecas')}
+              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
+                abaAtiva === 'boletos-pecas' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <span>🧾 Boletos de Peças & Fotos</span>
+            </button>
+
+            <button
+              onClick={() => setAbaAtiva('clientes-carros')}
+              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
+                abaAtiva === 'clientes-carros' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <span>🚗 Painel Clientes & Carros</span>
             </button>
 
             <button
@@ -151,6 +181,9 @@ export default function AdminDashboard({ emailUsuario, onLogout }: AdminDashboar
           )}
 
           {abaAtiva === 'financeiro' && <AdminFinanceiro />}
+          {abaAtiva === 'financeiro-master' && <AdminFinanceiroMaster />}
+          {abaAtiva === 'boletos-pecas' && <PainelBoletosPecas />}
+          {abaAtiva === 'clientes-carros' && <PainelClientesCarros />}
           {abaAtiva === 'contador' && <RelatorioContadorCartao />}
 
           {abaAtiva === 'equipe' && (
