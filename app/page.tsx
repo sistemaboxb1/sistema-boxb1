@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import FuncionarioDashboard from './components/FuncionarioDashboard';
+import AdminFinanceiroMaster from './components/AdminFinanceiroMaster';
 
 export default function Home() {
   const [sessao, setSessao] = useState<any>(null);
@@ -115,6 +116,13 @@ export default function Home() {
   }
 
   const emailUsuario = sessao.user?.email || '';
+  
+  // Identifica se é o administrador Izaias pelo e-mail (ajuste o e-mail se necessário ou use uma verificação geral)
+  const ehAdmin = emailUsuario.toLowerCase().includes('izaias') || emailUsuario.toLowerCase().includes('admin');
+
+  if (ehAdmin) {
+    return <AdminFinanceiroMaster emailUsuario={emailUsuario} onLogout={handleLogout} />;
+  }
 
   return (
     <FuncionarioDashboard emailUsuario={emailUsuario} onLogout={handleLogout} />
