@@ -3,33 +3,96 @@
 import React, { useState } from 'react';
 import ComandaDigitalOS from './ComandaDigitalOS';
 import PainelClientesCarros from './PainelClientesCarros';
+import PainelBoletosPecas from './PainelBoletosPecas';
+import { supabase } from '../lib/supabase';
 
 interface FuncionarioDashboardProps {
   emailUsuario: string;
   onLogout: () => void;
 }
 
+interface PagamentoRegistro {
+  id: string;
+  osId: string;
+  cliente: string;
+  metodo: string;
+  valor: number;
+  data: string;
+}
+
 export default function FuncionarioDashboard({ emailUsuario, onLogout }: FuncionarioDashboardProps) {
-  // Estados para gerenciar as abas especializadas do painel operacional do funcionário
-  const [abaAtiva, setAbaAtiva] = useState<'comanda' | 'clientes' | 'historico' | 'suporte'>('comanda');
+  const [abaAtiva, setAbaAtiva] = useState<'comanda' | 'clientes' | 'pagamentos' | 'boletos' | 'pecas-lucro'>('comanda');
+
+  // Estados para o cadastro de pagamentos integrados
+  const [osVinculada, setOsVinculada] = useState<string>('');
+  const [nomeClientePagto, setNomeClientePagto] = useState<string>('');
+  const [metodoPagamento, setMetodoPagamento] = useState<string>('pix');
+  const [valorPagamento, setValorPagamento] = useState<string>('');
+  const [mensagemPagto, setMensagemPagto] = useState<string>('');
+
+  // Estados para cadastro individual de peça e lucro pelo funcionário
+  const [nomePeca, setNomePeca] = useState<string>('');
+  const [custoPeca, setCustoPeca] = useState<string>('');
+  const [vendaPeca, setVendaPeca] = useState<string>('');
+  const [mensagemPeca, setMensagemPeca] = useState<string>('');
+
+  const registrarPagamentoIntegrado = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const { error } = await supabase.from('ordens_servico').update({
+        forma_pagamento: metodoPagamento,
+        status_pagamento: 'pago'
+      }).eq('os_codigo', osVinculada.trim());
+
+      if (error) throw error;
+      setMensagemPagto('Pagamento registrado e integrado à O.S. e ao banco de clientes com sucesso!');
+      setOsVinculada('');
+      setNomeClientePagto('');
+      setValorPagamento('');
+    } catch (err: any) {
+      setMensagemPagto('Erro ao registrar pagamento: ' + err.message);
+    }
+  };
+
+  const registrarPecaComLucro = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const custo = parseFloat(custoPeca) || 0;
+    const venda = parseFloat(vendaPeca) || 0;
+    const lucroUnitario = venda - custo;
+
+    try {
+      const { error } = await supabase.from('ordens_servico').insert([{
+        os_codigo: `PEC-${Math.floor(100 + Math.random() * 900)}`,
+        problema_relatado: `Peça: ${nomePeca} (Custo: R$ ${custo} | Venda: R$ ${venda} | Lucro: R$ ${lucroUnitario})`,
+        valor_total: venda,
+        status_pagamento: 'pago'
+      }]);
+
+      if (error) throw error;
+      setMensagemPeca(`Peça cadastrada! Lucro desta unidade: R$ ${lucroUnitario.toFixed(2)} (Registrado no sistema).`);
+      setNomePeca('');
+      setCustoPeca('');
+      setVendaPeca('');
+    } catch (err: any) {
+      setMensagemPeca('Erro ao registrar peça: ' + err.message);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-gray-950 text-white">
       
-      {/* Barra Lateral de Navegação (Sidebar do Funcionário) */}
+      {/* Barra Lateral do Funcionário */}
       <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col justify-between hidden md:flex shadow-xl">
         <div>
-          {/* Logo do Sistema BOXB1 na Lateral */}
           <div className="p-6 border-b border-gray-800">
             <h1 className="text-2xl font-black tracking-wider text-white">
               BOX<span className="text-yellow-500">B1</span>
             </h1>
             <p className="text-xs font-semibold text-blue-400 uppercase tracking-widest mt-1">
-              Painel Operacional (Funcionário)
+              Painel Operacional
             </p>
           </div>
 
-          {/* Menu de Opções Modulares Detalhado */}
           <nav className="p-4 space-y-2">
             <button
               onClick={() => setAbaAtiva('comanda')}
@@ -37,7 +100,7 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
                 abaAtiva === 'comanda' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <span>📋 Comanda Digital & O.S.</span>
+              <span>📋 Comanda Digital & Recibo</span>
             </button>
 
             <button
@@ -50,106 +113,185 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
             </button>
 
             <button
-              onClick={() => setAbaAtiva('historico')}
+              onClick={() => setAbaAtiva('pagamentos')}
               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'historico' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                abaAtiva === 'pagamentos' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <span>🔍 Histórico da Pista</span>
+              <span>💳 Registrar Pagamento O.S.</span>
             </button>
 
             <button
-              onClick={() => setAbaAtiva('suporte')}
+              onClick={() => setAbaAtiva('boletos')}
               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'suporte' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                abaAtiva === 'boletos' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <span>🛠️ Manuais & Suporte</span>
+              <span>🧾 Cadastrar Boleto de Peças</span>
+            </button>
+
+            <button
+              onClick={() => setAbaAtiva('pecas-lucro')}
+              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
+                abaAtiva === 'pecas-lucro' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <span>📦 Peça & Lucro Unitário</span>
             </button>
           </nav>
         </div>
 
-        {/* Rodapé da Sidebar com Identificação do Operador */}
         <div className="p-4 border-t border-gray-800 bg-gray-950/40">
           <div className="text-xs text-gray-400 mb-2 truncate">
             Funcionário: <strong className="text-gray-200">{emailUsuario}</strong>
           </div>
           <button
             onClick={onLogout}
-            className="w-full bg-red-600/25 hover:bg-red-600/40 border border-red-700/50 text-red-300 text-xs font-bold py-2 px-3 rounded-lg transition-colors cursor-pointer text-center shadow-inner"
+            className="w-full bg-red-600/25 hover:bg-red-600/40 border border-red-700/50 text-red-300 text-xs font-bold py-2 px-3 rounded-lg transition-colors cursor-pointer text-center"
           >
             Encerrar Sessão
           </button>
         </div>
       </aside>
 
-      {/* Conteúdo Principal da Página Operacional */}
+      {/* Conteúdo Principal */}
       <main className="flex-1 flex flex-col min-w-0">
-        
-        {/* Barra Superior */}
         <header className="h-16 bg-gray-900 border-b border-gray-800 px-6 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <span className="text-sm font-bold uppercase tracking-wider text-gray-400">Pista / Atendimento Técnico Automotivo</span>
-          </div>
-          <div className="flex items-center space-x-4">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-sm">
-              🔧 Operacional Ativo
-            </span>
-          </div>
+          <span className="text-sm font-bold uppercase tracking-wider text-gray-400">Pista / Atendimento Técnico</span>
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            🔧 Operacional Restrito (Sem Visão de Lucro Total)
+          </span>
         </header>
 
-        {/* Área Dinâmica baseada na Aba Selecionada com Extensividade */}
         <div className="p-8 overflow-y-auto space-y-6">
-          
           {abaAtiva === 'comanda' && <ComandaDigitalOS />}
-
           {abaAtiva === 'clientes' && <PainelClientesCarros />}
-
-          {abaAtiva === 'historico' && (
-            <div className="space-y-6">
-              <div className="bg-gradient-to-r from-gray-900 to-gray-900/60 border border-gray-800 rounded-2xl p-6 shadow-lg">
-                <h2 className="text-2xl font-black text-white">Histórico de Ordens da Pista</h2>
-                <p className="text-sm text-gray-400 mt-1">Acompanhe o andamento dos veículos que passaram pela oficina mecânica do BOXB1.</p>
+          
+          {abaAtiva === 'pagamentos' && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-xl space-y-6">
+              <div>
+                <h3 className="text-xl font-black text-white">Registrar Pagamento de O.S.</h3>
+                <p className="text-xs text-gray-400 mt-1">Informe a O.S., o método de pagamento e salve integrado ao banco de dados.</p>
               </div>
 
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl">
-                <h3 className="text-lg font-bold text-white mb-4">Veículos Concluídos e em Andamento na Semana</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-gray-400">
-                    <thead className="bg-gray-950 uppercase text-gray-300 border-b border-gray-800">
-                      <tr>
-                        <th className="px-4 py-3">O.S. Ref</th>
-                        <th className="px-4 py-3">Cliente / Veículo</th>
-                        <th className="px-4 py-3">Placa</th>
-                        <th className="px-4 py-3">Status Atual</th>
-                        <th className="px-4 py-3">Data Chegada</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-800">
-                      <tr className="hover:bg-gray-950/50">
-                        <td className="px-4 py-4 font-bold text-white">OS-2026-089</td>
-                        <td className="px-4 py-4 text-white">Carlos Eduardo (Golf GTI)</td>
-                        <td className="px-4 py-4 font-mono text-yellow-500">XYZ-9876</td>
-                        <td className="px-4 py-4"><span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 font-bold">Em Manutenção</span></td>
-                        <td className="px-4 py-4">05/09/2026</td>
-                      </tr>
-                    </tbody>
-                  </table>
+              {mensagemPagto && (
+                <div className="bg-gray-950 p-3 rounded border border-gray-800 text-xs text-yellow-400 font-semibold">
+                  {mensagemPagto}
                 </div>
-              </div>
+              )}
+
+              <form onSubmit={registrarPagamentoIntegrado} className="space-y-4 bg-gray-950 p-6 rounded-xl border border-gray-800">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Código da O.S. (Ex: OS-2026-089)</label>
+                    <input 
+                      type="text" 
+                      value={osVinculada} 
+                      onChange={(e) => setOsVinculada(e.target.value)} 
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                      required 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Nome do Cliente</label>
+                    <input 
+                      type="text" 
+                      value={nomeClientePagto} 
+                      onChange={(e) => setNomeClientePagto(e.target.value)} 
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                      required 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Método de Pagamento</label>
+                    <select 
+                      value={metodoPagamento} 
+                      onChange={(e) => setMetodoPagamento(e.target.value)} 
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
+                    >
+                      <option value="pix">PIX</option>
+                      <option value="cartao_credito">Cartão de Crédito</option>
+                      <option value="cartao_debito">Cartão de Débito</option>
+                      <option value="dinheiro">Dinheiro</option>
+                      <option value="boleto">Boleto</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Valor Recebido (R$)</label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      value={valorPagamento} 
+                      onChange={(e) => setValorPagamento(e.target.value)} 
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                      required 
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3 rounded-lg cursor-pointer">
+                  Salvar Pagamento na O.S. e Banco de Clientes
+                </button>
+              </form>
             </div>
           )}
 
-          {abaAtiva === 'suporte' && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-xl space-y-4">
-              <h3 className="text-xl font-black text-white">Manuais Técnicos e Orientações Operacionais</h3>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                Bem-vindo ao canal de suporte interno do BOXB1. Utilize as ferramentas de comanda digital para registrar todas as peças aplicadas e serviços executados na pista. Lembre-se de preencher corretamente o odômetro, o ano e a placa do veículo para manter o histórico do cliente sincronizado com o painel administrativo da diretoria.
-              </p>
-              <div className="bg-gray-950 p-4 rounded-xl border border-gray-800 text-xs text-gray-400 space-y-2">
-                <p><strong>• Regra 1:</strong> Sempre atualize a comanda digital caso haja inclusão de novas peças de revendedores.</p>
-                <p><strong>• Regra 2:</strong> Emita o PDF para o cliente acompanhar os valores detalhados de cada serviço.</p>
+          {abaAtiva === 'boletos' && <PainelBoletosPecas />}
+
+          {abaAtiva === 'pecas-lucro' && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-xl space-y-6">
+              <div>
+                <h3 className="text-xl font-black text-white">Cadastro de Peça Vendida & Margem Unitária</h3>
+                <p className="text-xs text-gray-400 mt-1">Informe o custo de aquisição e o preço de venda. O sistema calcula a margem desta peça específica sem exibir o lucro total da oficina.</p>
               </div>
+
+              {mensagemPeca && (
+                <div className="bg-gray-950 p-3 rounded border border-gray-800 text-xs text-yellow-400 font-semibold">
+                  {mensagemPeca}
+                </div>
+              )}
+
+              <form onSubmit={registrarPecaComLucro} className="space-y-4 bg-gray-950 p-6 rounded-xl border border-gray-800">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Nome / Descrição da Peça</label>
+                  <input 
+                    type="text" 
+                    value={nomePeca} 
+                    onChange={(e) => setNomePeca(e.target.value)} 
+                    placeholder="Ex: Pastilha de Freio Dianteira"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                    required 
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Preço de Custo (R$)</label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      value={custoPeca} 
+                      onChange={(e) => setCustoPeca(e.target.value)} 
+                      placeholder="0.00"
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                      required 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Preço de Venda ao Cliente (R$)</label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      value={vendaPeca} 
+                      onChange={(e) => setVendaPeca(e.target.value)} 
+                      placeholder="0.00"
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                      required 
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="w-full bg-green-600 hover:bg-green-500 text-white font-bold text-xs py-3 rounded-lg cursor-pointer">
+                  Salvar Peça e Registrar Lucro Unitário
+                </button>
+              </form>
             </div>
           )}
 

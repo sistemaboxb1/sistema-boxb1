@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, FormEvent } from 'react';
+import React, { useState, FormEvent, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface ItemBoleto {
   id: string;
@@ -11,21 +12,19 @@ interface ItemBoleto {
 
 interface BoletoRegistro {
   id: string;
+  codigo_boleto: string;
   revendedor: string;
-  valorTotal: number;
-  dataValidade: string;
-  fotoUrl: string;
-  itens: ItemBoleto[];
+  valor_total: number;
+  data_validade: string;
+  foto_url: string;
   status: 'pendente' | 'pago';
 }
 
 export default function PainelBoletosPecas() {
   const [revendedor, setRevendedor] = useState<string>('Auto Peças Distribuidora B1');
-  const [valorTotal, setValorTotal] = useState<string>('');
   const [dataValidade, setDataValidade] = useState<string>('');
   const [fotoBoleto, setFotoBoleto] = useState<File | null>(null);
   
-  // Itens detalhados do boleto
   const [itensBoleto, setItensBoleto] = useState<ItemBoleto[]>([
     { id: '1', peca: 'Kit Embreagem Corsa 1.8', quantidade: 1, valorUnitario: 380.00 },
     { id: '2', peca: 'Amortecedor Dianteiro Par', quantidade: 1, valorUnitario: 450.00 }
@@ -35,17 +34,28 @@ export default function PainelBoletosPecas() {
   const [qtdInput, setQtdInput] = useState<string>('1');
   const [valorUnitInput, setValorUnitInput] = useState<string>('');
   
-  const [boletosSalvos, setBoletosSalvos] = useState<BoletoRegistro[]>([
-    {
-      id: 'BOL-992',
-      revendedor: 'Distribuidora de Peças Master',
-      valorTotal: 830.00,
-      dataValidade: '2026-09-20',
-      fotoUrl: 'boleto_exemplo.png',
-      itens: [{ id: '1', peca: 'Kit Embreagem', quantidade: 1, valorUnitario: 830.00 }],
-      status: 'pendente'
+  const [boletosSalvos, setBoletosSalvos] = useState<BoletoRegistro[]>([]);
+  const [salvando, setSalvando] = useState<boolean>(false);
+  const [mensagem, setMensagem] = useState<string>('');
+
+  // Busca os boletos salvos no Supabase ao carregar a página
+  useEffect(() => {
+    carregarBoletos();
+  }, []);
+
+  const carregarBoletos = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('boletos_pecas')
+        .select('*')
+        .order('criado_em', { ascending: false });
+
+      if (error) throw error;
+      if (data) setBoletosSalvos(data);
+    } catch (err) {
+      console.error('Erro ao buscar boletos:', err);
     }
-  ]);
+  };
 
   const adicionarItemBoleto = () => {
     if (!pecaInput.trim() || !valorUnitInput) return;
@@ -65,34 +75,80 @@ export default function PainelBoletosPecas() {
     setItensBoleto(itensBoleto.filter(i => i.id !== id));
   };
 
-  const lidarComEnvioBoleto = (e: FormEvent<HTMLFormElement>) => {
+  const lidarComEnvioBoleto = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const totalCalc = itensBoleto.reduce((acc, i) => acc + (i.quantidade * i.valorUnitario), 0);
+    setSalvando(true);
+    setMensagem('');
 
-    const novoBoleto: BoletoRegistro = {
-      id: `BOL-${Math.floor(100 + Math.random() * 900)}`,
-      revendedor: revendedor.trim(),
-      valorTotal: totalCalc > 0 ? totalCalc : (parseFloat(valorTotal) || 0),
-      dataValidade,
-      fotoUrl: fotoBoleto ? fotoBoleto.name : 'sem_foto.png',
-      itens: itensBoleto,
-      status: 'pendente'
-    };
+    try {
+      const valorTotalCalc = itensBoleto.reduce((acc, i) => acc + (i.quantidade * i.valorUnitario), 0);
+      const codigoGerado = `BOL-${Math.floor(100 + Math.random() * 900)}`;
 
-    setBoletosSalvos([novoBoleto, ...boletosSalvos]);
-    alert('Boleto do revendedor de peças registrado com sucesso e foto salva no sistema!');
+      // 1. Salva o boleto principal no Supabase
+      const { data: boletoData, error: boletoError } = await supabase
+        .from('boletos_pecas')
+        .insert([
+          {
+            codigo_boleto: codigoGerado,
+            revendedor: revendedor.trim(),
+            valor_total: valorTotalCalc,
+            data_validade: dataValidade,
+            foto_url: fotoBoleto ? fotoBoleto.name : 'sem_foto.png',
+            status: 'pendente'
+          }
+        ])
+        .select()
+        .single();
+
+      if (boletoError) throw boletoError;
+      const boletoId = boletoData.id;
+
+      // 2. Salva os itens discriminados do boleto
+      if (itensBoleto.length > 0) {
+        const itensFormatados = itensBoleto.map(item => ({
+          boleto_id: boletoId,
+          peca: item.peca,
+          quantidade: item.quantidade,
+          valor_unitario: item.valorUnitario
+        }));
+
+        const { error: itensError } = await supabase
+          .from('itens_boletos')
+          .insert(itensFormatados);
+
+        if (itensError) throw itensError;
+      }
+
+      setMensagem('Boleto, itens e foto salvos com sucesso no Supabase!');
+      setRevendedor('');
+      setDataValidade('');
+      setFotoBoleto(null);
+      setItensBoleto([]);
+      carregarBoletos(); // Atualiza a lista na tela
+
+    } catch (err: any) {
+      console.error('Erro ao salvar boleto:', err);
+      setMensagem('Erro ao salvar boleto: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+      setSalvando(false);
+    }
   };
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl space-y-8">
       
-      {/* Cabeçalho */}
       <div>
-        <h3 className="text-xl font-black text-white">Painel de Boletos de Revendedores de Peças</h3>
+        <h3 className="text-xl font-black text-white">Painel de Boletos de Revendedores de Peças (Supabase)</h3>
         <p className="text-xs text-gray-400 mt-1">
-          Registre contas a pagar, anexe a foto do boleto físico, defina data de validade e detalhe peça por peça.
+          Registre contas a pagar, anexe a foto do boleto físico, defina validade e detalhe peça por peça com persistência real.
         </p>
       </div>
+
+      {mensagem && (
+        <div className="rounded-lg bg-gray-950 border border-gray-800 p-3 text-xs text-yellow-400 font-semibold">
+          {mensagem}
+        </div>
+      )}
 
       {/* Formulário de Cadastro de Boleto */}
       <form onSubmit={lidarComEnvioBoleto} className="space-y-6 bg-gray-950 p-6 rounded-xl border border-gray-800">
@@ -191,36 +247,37 @@ export default function PainelBoletosPecas() {
         <div className="pt-2">
           <button 
             type="submit"
-            className="w-full bg-green-600 hover:bg-green-500 text-white font-bold text-xs py-3 rounded-lg transition-all cursor-pointer shadow-md"
+            disabled={salvando}
+            className="w-full bg-green-600 hover:bg-green-500 text-white font-bold text-xs py-3 rounded-lg transition-all cursor-pointer shadow-md disabled:opacity-50"
           >
-            Salvar Boleto, Foto e Itens no Sistema
+            {salvando ? 'Salvando no Banco...' : 'Salvar Boleto, Foto e Itens no Supabase'}
           </button>
         </div>
       </form>
 
-      {/* Lista de Boletos Registrados */}
+      {/* Lista de Boletos Registrados no Supabase */}
       <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Boletos Cadastrados de Fornecedores</h4>
+        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Boletos Cadastrados (Banco de Dados)</h4>
         
         <div className="space-y-4">
           {boletosSalvos.map((bol) => (
             <div key={bol.id} className="bg-gray-900 border border-gray-800 p-4 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
-                <span className="text-xs font-bold text-yellow-500">{bol.id} - {bol.revendedor}</span>
-                <p className="text-sm font-black text-white mt-0.5">Total: R$ {bol.valorTotal.toFixed(2)}</p>
-                <p className="text-[11px] text-gray-400 mt-1">Vencimento: <strong className="text-red-400">{bol.dataValidade}</strong> | Foto: {bol.fotoUrl}</p>
+                <span className="text-xs font-bold text-yellow-500">{bol.codigo_boleto} - {bol.revendedor}</span>
+                <p className="text-sm font-black text-white mt-0.5">Total: R$ {Number(bol.valor_total).toFixed(2)}</p>
+                <p className="text-[11px] text-gray-400 mt-1">Vencimento: <strong className="text-red-400">{bol.data_validade}</strong> | Arquivo: {bol.foto_url}</p>
               </div>
 
               <div className="text-right">
                 <span className="inline-block px-3 py-1 rounded-full text-[10px] font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 mb-2">
-                  Pendente de Pagamento
+                  {bol.status.toUpperCase()}
                 </span>
-                <div className="text-[11px] text-gray-400">
-                  {bol.itens.length} peça(s) detalhada(s)
-                </div>
               </div>
             </div>
           ))}
+          {boletosSalvos.length === 0 && (
+            <p className="text-xs text-gray-500 text-center py-4">Nenhum boleto cadastrado no banco ainda.</p>
+          )}
         </div>
       </div>
 

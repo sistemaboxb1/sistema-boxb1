@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface ItemComanda {
   id: string;
@@ -8,239 +9,314 @@ interface ItemComanda {
   valor: number;
 }
 
-interface ComandaProps {
-  osId?: string;
+interface OrdemServicoHistorico {
+  id: string;
+  os_codigo: string;
+  problema_relatado: string;
+  valor_total: number;
+  status_pagamento: string;
+  forma_pagamento: string;
+  criado_em: string;
 }
 
-export default function ComandaDigitalOS({ osId = 'OS-2026-089' }: ComandaProps) {
-  // Informações do Veículo e Cliente
-  const [cliente, setCliente] = useState<string>('Carlos Eduardo');
+export default function ComandaDigitalOS() {
+  // Estados de controle de visualização (Interno da Oficina vs Layout do Cliente)
+  const [modoVisualizacao, setModoVisualizacao] = useState<'interno' | 'cliente'>('interno');
+
+  // Dados do Cliente e Veículo Ativo
+  const [osCodigo, setOsCodigo] = useState<string>('OS-2026-' + Math.floor(100 + Math.random() * 900));
+  const [clienteNome, setClienteNome] = useState<string>('Carlos Eduardo');
   const [telefone, setTelefone] = useState<string>('(11) 98765-4321');
   const [modeloCarro, setModeloCarro] = useState<string>('Volkswagen Golf GTI 2.0');
   const [placa, setPlaca] = useState<string>('XYZ-9876');
-  const [ano, setAno] = useState<string>('2019');
-  const [km, setKm] = useState<string>('68.000 km');
-  const [problemaRelatado, setProblemaRelatado] = useState<string>('Veículo falhando ao acelerar e ruído na suspensão dianteira.');
+  const [problemaRelatado, setProblemaRelatado] = useState<string>('Veículo falhando ao acelerar e ruído na suspensão.');
 
-  // Catálogo de serviços salvos (reutilizáveis para outras demandas)
-  const [catalogoServicos, setCatalogoServicos] = useState<string[]>([
-    'Diagnóstico Avançado / Scanner',
-    'Troca de Disco e Pastilhas de Freio',
-    'Troca de Óleo do Motor e Filtro',
-    'Alinhamento e Balanceamento',
-    'Revisão de Suspensão Dianteira'
-  ]);
+  // Pagamento e Status
+  const [statusPagamento, setStatusPagamento] = useState<string>('pendente');
+  const [formaPagamento, setFormaPagamento] = useState<string>('pix');
 
-  // Itens ativos da comanda atual
+  // Histórico de O.S. anteriores do mesmo cliente
+  const [historicoCliente, setHistoricoCliente] = useState<OrdemServicoHistorico[]>([]);
+
+  // Itens da Comanda
   const [itensComanda, setItensComanda] = useState<ItemComanda[]>([
     { id: '1', descricao: 'Diagnóstico Avançado / Scanner', valor: 150.00 },
     { id: '2', descricao: 'Troca de Disco e Pastilhas de Freio', valor: 420.00 }
   ]);
 
-  // Inputs para novo item digitável
   const [descricaoInput, setDescricaoInput] = useState<string>('');
   const [valorInput, setValorInput] = useState<string>('');
-  const [salvarNoCatalogo, setSalvarNoCatalogo] = useState<boolean>(true);
+  const [salvando, setSalvando] = useState<boolean>(false);
+  const [mensagem, setMensagem] = useState<string>('');
 
   const valorTotalComanda = itensComanda.reduce((acc, item) => acc + item.valor, 0);
 
-  const adicionarItemComanda = () => {
-    if (!descricaoInput.trim() || !valorInput) return;
+  useEffect(() => {
+    carregarHistoricoCliente();
+  }, []);
 
-    const novoItem: ItemComanda = {
-      id: Date.now().toString(),
-      descricao: descricaoInput.trim(),
-      valor: parseFloat(valorInput) || 0
-    };
+  const carregarHistoricoCliente = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('ordens_servico')
+        .select('*')
+        .order('criado_em', { ascending: false });
 
-    setItensComanda([...itensComanda, novoItem]);
-
-    // Se o usuário quiser salvar no catálogo reutilizável
-    if (salvarNoCatalogo && !catalogoServicos.includes(descricaoInput.trim())) {
-      setCatalogoServicos([...catalogoServicos, descricaoInput.trim()]);
+      if (error) throw error;
+      if (data) setHistoricoCliente(data);
+    } catch (err) {
+      console.error('Erro ao carregar histórico:', err);
     }
+  };
 
+  const adicionarItem = () => {
+    if (!descricaoInput.trim() || !valorInput) return;
+    setItensComanda([
+      ...itensComanda,
+      { id: Date.now().toString(), descricao: descricaoInput.trim(), valor: parseFloat(valorInput) || 0 }
+    ]);
     setDescricaoInput('');
     setValorInput('');
   };
 
-  const selecionarDoCatalogo = (servicoCatalogo: string) => {
-    setDescricaoInput(servicoCatalogo);
-  };
-
   const removerItem = (id: string) => {
-    setItensComanda(itensComanda.filter(item => item.id !== id));
+    setItensComanda(itensComanda.filter(i => i.id !== id));
   };
 
-  const emitirPdfComanda = () => {
-    window.print(); // Dispara a função nativa de impressão/geração de PDF do navegador formatada para a comanda
+  const salvarOrdemServicoSupabase = async () => {
+    setSalvando(true);
+    setMensagem('');
+
+    try {
+      const { error } = await supabase.from('ordens_servico').insert([{
+        os_codigo: osCodigo,
+        problema_relatado: problemaRelatado,
+        status_pagamento: statusPagamento,
+        forma_pagamento: formaPagamento,
+        valor_total: valorTotalComanda
+      }]);
+
+      if (error) throw error;
+      setMensagem('Ordem de serviço e status de pagamento salvos com sucesso no banco!');
+      carregarHistoricoCliente();
+    } catch (err: any) {
+      setMensagem('Erro ao salvar O.S.: ' + err.message);
+    } finally {
+      setSalvando(false);
+    }
   };
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl space-y-8">
+    <div className="space-y-6">
       
-      {/* Cabeçalho */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-800 pb-6">
+      {/* Botão de Alternância de Layout (Interno vs Cliente) */}
+      <div className="bg-gray-900 border border-gray-800 p-4 rounded-xl flex justify-between items-center shadow-lg">
         <div>
-          <span className="text-xs font-bold text-yellow-500 uppercase tracking-widest">Comanda Digital Atualizável</span>
-          <h2 className="text-2xl font-black text-white mt-1">Ordem de Serviço #{osId}</h2>
+          <span className="text-xs font-bold text-yellow-500 uppercase tracking-widest">Gerenciamento de O.S. & Recibo</span>
+          <h3 className="text-lg font-black text-white">{osCodigo} - {clienteNome}</h3>
         </div>
-        <div>
+        <div className="flex items-center space-x-3">
           <button 
-            onClick={emitirPdfComanda}
-            className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3 px-5 rounded-xl transition-all shadow-lg cursor-pointer flex items-center space-x-2"
+            onClick={() => setModoVisualizacao('interno')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+              modoVisualizacao === 'interno' ? 'bg-blue-600 text-white shadow' : 'bg-gray-800 text-gray-400'
+            }`}
           >
-            <span>📄 Emitir PDF / Enviar ao Cliente</span>
+            🔧 Visão Interna (Oficina)
+          </button>
+          <button 
+            onClick={() => setModoVisualizacao('cliente')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+              modoVisualizacao === 'cliente' ? 'bg-green-600 text-white shadow' : 'bg-gray-800 text-gray-400'
+            }`}
+          >
+            ✨ Layout Exclusivo para o Cliente
           </button>
         </div>
       </div>
 
-      {/* Detalhes do Carro e Dono */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-950 p-6 rounded-xl border border-gray-800">
-        <div>
-          <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Cliente & Contato</label>
-          <input 
-            type="text" 
-            value={cliente} 
-            onChange={(e) => setCliente(e.target.value)} 
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white mb-2"
-          />
-          <input 
-            type="text" 
-            value={telefone} 
-            onChange={(e) => setTelefone(e.target.value)} 
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
-          />
+      {mensagem && (
+        <div className="bg-gray-950 border border-gray-800 p-3 rounded-lg text-xs text-yellow-400 font-semibold">
+          {mensagem}
         </div>
+      )}
 
-        <div>
-          <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Veículo (Modelo / Placa)</label>
-          <input 
-            type="text" 
-            value={modeloCarro} 
-            onChange={(e) => setModeloCarro(e.target.value)} 
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white mb-2"
-          />
-          <div className="grid grid-cols-3 gap-2">
-            <input type="text" value={placa} onChange={(e) => setPlaca(e.target.value)} className="bg-gray-900 border border-gray-700 rounded-lg px-2 py-2 text-xs text-white uppercase" />
-            <input type="text" value={ano} onChange={(e) => setAno(e.target.value)} className="bg-gray-900 border border-gray-700 rounded-lg px-2 py-2 text-xs text-white" />
-            <input type="text" value={km} onChange={(e) => setKm(e.target.value)} className="bg-gray-900 border border-gray-700 rounded-lg px-2 py-2 text-xs text-white" />
+      {/* ================= VISÃO INTERNA DA OFICINA ================= */}
+      {modoVisualizacao === 'interno' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl space-y-8">
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-950 p-6 rounded-xl border border-gray-800">
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Cliente & Contato</label>
+              <input type="text" value={clienteNome} onChange={(e) => setClienteNome(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white mb-2" />
+              <input type="text" value={telefone} onChange={(e) => setTelefone(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Veículo (Modelo / Placa)</label>
+              <input type="text" value={modeloCarro} onChange={(e) => setModeloCarro(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white mb-2" />
+              <input type="text" value={placa} onChange={(e) => setPlaca(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-2 text-xs text-white uppercase" />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Problema Relatado</label>
+              <textarea rows={3} value={problemaRelatado} onChange={(e) => setProblemaRelatado(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-xs text-white"></textarea>
+            </div>
           </div>
-        </div>
 
-        <div>
-          <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Problema Relatado</label>
-          <textarea 
-            rows={3} 
-            value={problemaRelatado} 
-            onChange={(e) => setProblemaRelatado(e.target.value)} 
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-xs text-white focus:outline-none"
-          ></textarea>
-        </div>
-      </div>
-
-      {/* Adicionar Serviços / Itens à Comanda (Com Catálogo Reutilizável) */}
-      <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
-        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Adicionar Serviço ou Peça na Comanda</h3>
-        
-        {/* Atalhos do Catálogo Reutilizável */}
-        <div>
-          <span className="block text-[11px] text-gray-400 mb-2">Serviços salvos anteriormente (clique para preencher rápido):</span>
-          <div className="flex flex-wrap gap-2">
-            {catalogoServicos.map((serv, index) => (
-              <button 
-                key={index}
-                type="button"
-                onClick={() => selecionarDoCatalogo(serv)}
-                className="bg-gray-900 hover:bg-gray-800 border border-gray-700 text-gray-300 text-xs px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-              >
-                + {serv}
-              </button>
-            ))}
+          {/* Controle de Pagamento na O.S. */}
+          <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Status de Pagamento</label>
+              <select value={statusPagamento} onChange={(e) => setStatusPagamento(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white">
+                <option value="pendente">Pendente / Em Aberto</option>
+                <option value="pago">Pago / Quitado</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Método de Pagamento</label>
+              <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white">
+                <option value="pix">PIX</option>
+                <option value="cartao_credito">Cartão de Crédito</option>
+                <option value="cartao_debito">Cartão de Débito</option>
+                <option value="dinheiro">Dinheiro</option>
+                <option value="boleto">Boleto</option>
+              </select>
+            </div>
           </div>
-        </div>
 
-        {/* Inputs de Inclusão */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-          <div className="md:col-span-2">
-            <input 
-              type="text" 
-              placeholder="Digite o serviço ou peça (Ex: Retifica de cabeçote)..."
-              value={descricaoInput}
-              onChange={(e) => setDescricaoInput(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-xs text-white"
-            />
-          </div>
-          <div>
-            <input 
-              type="number" 
-              step="0.01"
-              placeholder="Valor (R$)"
-              value={valorInput}
-              onChange={(e) => setValorInput(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-xs text-white"
-            />
-          </div>
-        </div>
+          {/* Adicionar Serviços */}
+          <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500">Serviços e Peças da O.S.</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="md:col-span-2">
+                <input type="text" placeholder="Nome do serviço ou peça..." value={descricaoInput} onChange={(e) => setDescricaoInput(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" />
+              </div>
+              <div className="flex space-x-2">
+                <input type="number" step="0.01" placeholder="Valor R$" value={valorInput} onChange={(e) => setValorInput(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" />
+                <button type="button" onClick={adicionarItem} className="bg-blue-600 px-4 py-2 rounded-lg text-xs font-bold text-white cursor-pointer">+</button>
+              </div>
+            </div>
 
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-2">
-          <label className="flex items-center text-xs text-gray-400 cursor-pointer">
-            <input 
-              type="checkbox" 
-              checked={salvarNoCatalogo}
-              onChange={(e) => setSalvarNoCatalogo(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-blue-600 mr-2"
-            />
-            Salvar este serviço no catálogo para usar em futuros clientes
-          </label>
-
-          <button 
-            type="button"
-            onClick={adicionarItemComanda}
-            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3 px-6 rounded-lg transition-all cursor-pointer"
-          >
-            Adicionar à Comanda Digital
-          </button>
-        </div>
-      </div>
-
-      {/* Listagem Atualizável da Comanda */}
-      <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
-        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Itens Registrados na Comanda Atual</h3>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-gray-400">
-            <thead className="bg-gray-900 uppercase text-gray-300 border-b border-gray-800">
-              <tr>
-                <th className="px-4 py-3">Descrição do Serviço / Peça</th>
-                <th className="px-4 py-3">Valor</th>
-                <th className="px-4 py-3 text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800">
+            <div className="divide-y divide-gray-800">
               {itensComanda.map((item) => (
-                <tr key={item.id} className="hover:bg-gray-900/40">
-                  <td className="px-4 py-4 font-medium text-white">{item.descricao}</td>
-                  <td className="px-4 py-4 text-yellow-500 font-bold">R$ {item.valor.toFixed(2)}</td>
-                  <td className="px-4 py-4 text-right">
-                    <button 
-                      onClick={() => removerItem(item.id)}
-                      className="text-red-400 hover:text-red-300 font-bold px-2 py-1 bg-red-950/40 rounded border border-red-900/50 cursor-pointer"
-                    >
-                      Remover
-                    </button>
-                  </td>
-                </tr>
+                <div key={item.id} className="py-2 flex justify-between items-center text-xs">
+                  <span className="text-gray-300">{item.descricao}</span>
+                  <div className="flex items-center space-x-4">
+                    <span className="text-yellow-400 font-bold">R$ {item.valor.toFixed(2)}</span>
+                    <button type="button" onClick={() => removerItem(item.id)} className="text-red-400">✕</button>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
 
-        <div className="pt-4 border-t border-gray-800 flex justify-between items-center">
-          <span className="text-xs uppercase font-bold text-gray-400">Total Atualizado da Comanda:</span>
-          <span className="text-2xl font-black text-green-400">R$ {valorTotalComanda.toFixed(2)}</span>
+            <div className="pt-2 border-t border-gray-800 flex justify-between items-center text-sm font-black text-white">
+              <span>Total da O.S.:</span>
+              <span className="text-green-400 text-lg">R$ {valorTotalComanda.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <button onClick={salvarOrdemServicoSupabase} disabled={salvando} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3.5 rounded-lg cursor-pointer shadow-lg">
+            {salvando ? 'Salvando O.S. no Banco...' : 'Salvar Ordem de Serviço & Vincular ao Cliente'}
+          </button>
+
+          {/* Histórico de Passagens Anteriores do Cliente */}
+          <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-white">Histórico de Ordens de Serviço Anteriores</h4>
+            <div className="space-y-2">
+              {historicoCliente.map((os) => (
+                <div key={os.id} className="bg-gray-900 p-4 rounded-lg flex justify-between items-center text-xs border border-gray-800">
+                  <div>
+                    <span className="font-bold text-yellow-500">{os.os_codigo}</span>
+                    <p className="text-gray-400 mt-0.5">{os.problema_relatado}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-black text-white block">R$ {Number(os.valor_total).toFixed(2)}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${os.status_pagamento === 'pago' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                      {os.status_pagamento.toUpperCase()} ({os.forma_pagamento})
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
-      </div>
+      )}
+
+      {/* ================= LAYOUT EXCLUSIVO E BONITO PARA O CLIENTE ================= */}
+      {modoVisualizacao === 'cliente' && (
+        <div className="bg-white text-gray-900 border border-gray-300 rounded-2xl p-8 shadow-2xl space-y-8 max-w-2xl mx-auto">
+          
+          <div className="text-center border-b border-gray-200 pb-6">
+            <h1 className="text-3xl font-black tracking-wider text-gray-900">
+              BOX<span className="text-yellow-600">B1</span>
+            </h1>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mt-1">
+              Centro Automotivo Especializado • Recibo Oficial
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl text-xs">
+            <div>
+              <span className="block text-gray-400 uppercase font-semibold text-[10px]">Cliente:</span>
+              <strong className="text-gray-800 text-sm">{clienteNome}</strong>
+            </div>
+            <div>
+              <span className="block text-gray-400 uppercase font-semibold text-[10px]">Veículo:</span>
+              <strong className="text-gray-800 text-sm">{modeloCarro} ({placa})</strong>
+            </div>
+            <div>
+              <span className="block text-gray-400 uppercase font-semibold text-[10px]">Ordem de Serviço:</span>
+              <strong className="text-gray-800 text-sm">{osCodigo}</strong>
+            </div>
+            <div>
+              <span className="block text-gray-400 uppercase font-semibold text-[10px]">Status do Pagamento:</span>
+              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${statusPagamento === 'pago' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                {statusPagamento === 'pago' ? `QUITADO VIA ${formaPagamento.toUpperCase()}` : 'PENDENTE'}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">Serviços e Peças Realizadas</h4>
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-100 uppercase text-gray-600 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3">Descrição</th>
+                    <th className="px-4 py-3 text-right">Valor</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {itensComanda.map((item) => (
+                    <tr key={item.id}>
+                      <td className="px-4 py-3 font-medium text-gray-800">{item.descricao}</td>
+                      <td className="px-4 py-3 text-right font-bold text-gray-900">R$ {item.valor.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-gray-200 flex justify-between items-center">
+            <span className="text-sm uppercase font-bold text-gray-600">Total Investido no Veículo:</span>
+            <span className="text-2xl font-black text-green-600">R$ {valorTotalComanda.toFixed(2)}</span>
+          </div>
+
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-[11px] text-gray-600 leading-relaxed text-center font-medium">
+            ⚠️ <strong>Aviso Legal:</strong> Este demonstrativo serve como recibo oficial e consubstancia obrigação líquida, certa e exigível, podendo ser levada a protesto e executada judicialmente em caso de inadimplemento.
+          </div>
+
+          <div className="text-center pt-4">
+            <button onClick={() => window.print()} className="bg-gray-900 hover:bg-gray-800 text-white font-bold text-xs py-3 px-8 rounded-xl shadow-md cursor-pointer">
+              🖨️ Imprimir / Salvar PDF para o Cliente
+            </button>
+          </div>
+
+        </div>
+      )}
 
     </div>
   );
