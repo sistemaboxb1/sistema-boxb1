@@ -39,7 +39,6 @@ export default function PainelConsultaClientesOS() {
   const carregarClientesEOs = async () => {
     setCarregando(true);
     try {
-      // 1. Busca todos os clientes
       const { data: clientesData, error: errCli } = await supabase
         .from('clientes')
         .select('*')
@@ -47,7 +46,6 @@ export default function PainelConsultaClientesOS() {
 
       if (errCli) throw errCli;
 
-      // 2. Para cada cliente, busca seus veículos e ordens de serviço vinculadas
       const clientesCompletos = await Promise.all(
         (clientesData || []).map(async (cli) => {
           const { data: veiculosData } = await supabase
@@ -107,12 +105,11 @@ export default function PainelConsultaClientesOS() {
       <div className="space-y-4">
         {clientes.map((cli) => {
           const estaExpandido = expandidoId === cli.id;
-          const total Gasto = cli.ordens_servico.reduce((acc, os) => acc + Number(os.valor_total), 0);
+          const totalGasto = cli.ordens_servico.reduce((acc, os) => acc + Number(os.valor_total), 0);
 
           return (
             <div key={cli.id} className="bg-gray-950 border border-gray-800 rounded-xl overflow-hidden transition-all">
               
-              {/* Cabeçalho do Cliente */}
               <div 
                 onClick={() => alternarExpandir(cli.id)}
                 className="p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 cursor-pointer hover:bg-gray-900/50"
@@ -139,7 +136,7 @@ export default function PainelConsultaClientesOS() {
                 <div className="flex items-center space-x-6 w-full md:w-auto justify-between md:justify-end">
                   <div className="text-right">
                     <span className="text-[10px] uppercase font-bold text-gray-500 block">Total em O.S.</span>
-                    <span className="text-sm font-black text-green-400">R$ {total Gasto.toFixed(2)}</span>
+                    <span className="text-sm font-black text-green-400">R$ {totalGasto.toFixed(2)}</span>
                   </div>
                   <div className="text-right">
                     <span className="text-[10px] uppercase font-bold text-gray-500 block">Passagens</span>
@@ -151,7 +148,6 @@ export default function PainelConsultaClientesOS() {
                 </div>
               </div>
 
-              {/* Lista Expansível de Ordens de Serviço do Cliente */}
               {estaExpandido && (
                 <div className="bg-gray-900/80 border-t border-gray-800 p-5 space-y-3">
                   <h5 className="text-xs font-bold uppercase tracking-wider text-yellow-500">Ordens de Serviço Registradas para {cli.nome}:</h5>
