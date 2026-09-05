@@ -122,7 +122,8 @@ export default function Home() {
 
   const emailUsuario = sessao.user?.email || '';
   
-  const ehAdmin = emailUsuario.toLowerCase().includes('izaias') || emailUsuario.toLowerCase().includes('admin');
+  // Verifica se o e-mail logado é exatamente o do Admin Izaias
+  const ehAdmin = emailUsuario.trim().toLowerCase() === 'izaias@boxb1.com';
 
   const AdminComponent = AdminFinanceiroMaster as React.ComponentType<AdminProps>;
 
