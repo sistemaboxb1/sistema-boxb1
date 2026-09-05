@@ -3,192 +3,135 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
-interface OrdemServicoItem {
+interface PecaItem {
   id: string;
-  os_codigo: string;
-  problema_relatado: string;
-  valor_total: number;
-  status_pagamento: string;
-  forma_pagamento: string;
+  nome_peca: string;
+  preco_custo: number;
+  preco_venda: number;
+  lucro_unitario: number;
   criado_em: string;
 }
 
-interface VeiculoItem {
-  id: string;
-  modelo: string;
-  placa: string;
-}
-
-interface ClienteComHistorico {
-  id: string;
-  nome: string;
-  telefone: string;
-  veiculos: VeiculoItem[];
-  ordens_servico: OrdemServicoItem[];
-}
-
-export default function PainelConsultaClientesOS() {
-  const [clientes, setClientes] = useState<ClienteComHistorico[]>([]);
-  const [carregando, setCarregando] = useState<boolean>(true);
-  const [expandidoId, setExpandidoId] = useState<string | null>(null);
+export default function PainelPecasFuncionario() {
+  const [nomePeca, setNomePeca] = useState<string>('');
+  const [custoPeca, setCustoPeca] = useState<string>('');
+  const [vendaPeca, setVendaPeca] = useState<string>('');
+  const [mensagem, setMensagem] = useState<string>('');
+  const [listaPecas, setListaPecas] = useState<PecaItem[]>([]);
 
   useEffect(() => {
-    carregarClientesEOs();
+    carregarPecas();
   }, []);
 
-  const carregarClientesEOs = async () => {
-    setCarregando(true);
+  const carregarPecas = async () => {
+    const { data } = await supabase
+      .from('pecas_cadastradas')
+      .select('*')
+      .order('criado_em', { ascending: false });
+    if (data) setListaPecas(data);
+  };
+
+  const salvarPeca = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const custo = parseFloat(custoPeca) || 0;
+    const venda = parseFloat(vendaPeca) || 0;
+    const lucro = venda - custo;
+
     try {
-      const { data: clientesData, error: errCli } = await supabase
-        .from('clientes')
-        .select('*')
-        .order('nome', { ascending: true });
+      const { error } = await supabase.from('pecas_cadastradas').insert([{
+        nome_peca: nomePeca.trim(),
+        preco_custo: custo,
+        preco_venda: venda,
+        lucro_unitario: lucro
+      }]);
 
-      if (errCli) throw errCli;
-
-      const clientesCompletos = await Promise.all(
-        (clientesData || []).map(async (cli) => {
-          const { data: veiculosData } = await supabase
-            .from('veiculos')
-            .select('id, modelo, placa')
-            .eq('cliente_id', cli.id);
-
-          const { data: osData } = await supabase
-            .from('ordens_servico')
-            .select('*')
-            .eq('cliente_id', cli.id)
-            .order('criado_em', { ascending: false });
-
-          return {
-            ...cli,
-            veiculos: veiculosData || [],
-            ordens_servico: osData || []
-          };
-        })
-      );
-
-      setClientes(clientesCompletos);
-    } catch (err) {
-      console.error('Erro ao buscar dados de clientes e O.S.:', err);
-    } finally {
-      setCarregando(false);
+      if (error) throw error;
+      setMensagem('Peça cadastrada com sucesso e integrada ao painel do Admin!');
+      setNomePeca('');
+      setCustoPeca('');
+      setVendaPeca('');
+      carregarPecas();
+    } catch (err: any) {
+      setMensagem('Erro ao cadastrar peça: ' + err.message);
     }
   };
 
-  const alternarExpandir = (id: string) => {
-    setExpandidoId(expandidoId === id ? null : id);
-  };
-
-  if (carregando) {
-    return (
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 text-center text-gray-400 text-xs">
-        Carregando base de clientes e ordens de serviço...
-      </div>
-    );
-  }
-
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl space-y-6">
-      <div className="flex justify-between items-center border-b border-gray-800 pb-4">
-        <div>
-          <h3 className="text-xl font-black text-white">Consulta de Clientes & Ordens de Serviço Vinculadas</h3>
-          <p className="text-xs text-gray-400 mt-1">Visualize o histórico completo de passagens e O.S. associadas a cada cliente da oficina.</p>
+      <div>
+        <h3 className="text-xl font-black text-white">Cadastro de Peças & Margens</h3>
+        <p className="text-xs text-gray-400 mt-1">Cadastre as peças comercializadas. O registro fica isolado aqui e sincronizado com a diretoria, sem poluir as Ordens de Serviço.</p>
+      </div>
+
+      {mensagem && (
+        <div className="bg-gray-950 p-3 rounded border border-gray-800 text-xs text-yellow-400 font-semibold">
+          {mensagem}
         </div>
-        <button 
-          onClick={carregarClientesEOs}
-          className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-xs py-2 px-4 rounded-lg transition-colors cursor-pointer"
-        >
-          🔄 Atualizar Lista
+      )}
+
+      <form onSubmit={salvarPeca} className="space-y-4 bg-gray-950 p-6 rounded-xl border border-gray-800">
+        <div>
+          <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Nome da Peça</label>
+          <input 
+            type="text" 
+            value={nomePeca} 
+            onChange={(e) => setNomePeca(e.target.value)} 
+            placeholder="Ex: Pastilha de Freio Dianteira"
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+            required 
+          />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Preço de Custo (R$)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              value={custoPeca} 
+              onChange={(e) => setCustoPeca(e.target.value)} 
+              placeholder="0.00"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+              required 
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Preço de Venda (R$)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              value={vendaPeca} 
+              onChange={(e) => setVendaPeca(e.target.value)} 
+              placeholder="0.00"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+              required 
+            />
+          </div>
+        </div>
+        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3 rounded-lg cursor-pointer">
+          Cadastrar Peça no Sistema
         </button>
-      </div>
+      </form>
 
-      <div className="space-y-4">
-        {clientes.map((cli) => {
-          const estaExpandido = expandidoId === cli.id;
-          const totalGasto = cli.ordens_servico.reduce((acc, os) => acc + Number(os.valor_total), 0);
-
-          return (
-            <div key={cli.id} className="bg-gray-950 border border-gray-800 rounded-xl overflow-hidden transition-all">
-              
-              <div 
-                onClick={() => alternarExpandir(cli.id)}
-                className="p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 cursor-pointer hover:bg-gray-900/50"
-              >
-                <div>
-                  <div className="flex items-center space-x-3">
-                    <h4 className="text-sm font-black text-white">{cli.nome}</h4>
-                    <span className="text-[11px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20">
-                      {cli.telefone}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1 flex flex-wrap gap-2">
-                    <span>Veículo(s):</span>
-                    {cli.veiculos.length > 0 ? (
-                      cli.veiculos.map(v => (
-                        <strong key={v.id} className="text-yellow-400">{v.modelo} ({v.placa})</strong>
-                      ))
-                    ) : (
-                      <span className="italic text-gray-500">Nenhum veículo cadastrado diretamente</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-6 w-full md:w-auto justify-between md:justify-end">
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Total em O.S.</span>
-                    <span className="text-sm font-black text-green-400">R$ {totalGasto.toFixed(2)}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Passagens</span>
-                    <span className="text-sm font-black text-white">{cli.ordens_servico.length} O.S.</span>
-                  </div>
-                  <span className="text-xs font-bold text-yellow-500">
-                    {estaExpandido ? '▲ Ocultar O.S.' : '▼ Ver O.S.'}
-                  </span>
-                </div>
+      {/* Histórico Restrito apenas a Peças */}
+      <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Histórico de Peças Cadastradas</h4>
+        <div className="space-y-2">
+          {listaPecas.map((p) => (
+            <div key={p.id} className="bg-gray-900 p-4 rounded-lg flex justify-between items-center text-xs border border-gray-800">
+              <div>
+                <span className="font-bold text-yellow-500">{p.nome_peca}</span>
+                <p className="text-gray-400 mt-0.5">Custo: R$ {Number(p.preco_custo).toFixed(2)} | Venda: R$ {Number(p.preco_venda).toFixed(2)}</p>
               </div>
-
-              {estaExpandido && (
-                <div className="bg-gray-900/80 border-t border-gray-800 p-5 space-y-3">
-                  <h5 className="text-xs font-bold uppercase tracking-wider text-yellow-500">Ordens de Serviço Registradas para {cli.nome}:</h5>
-                  
-                  {cli.ordens_servico.length > 0 ? (
-                    <div className="space-y-2">
-                      {cli.ordens_servico.map((os) => (
-                        <div key={os.id} className="bg-gray-950 p-4 rounded-lg border border-gray-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs">
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <span className="font-black text-yellow-400">{os.os_codigo}</span>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${os.status_pagamento === 'pago' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
-                                {os.status_pagamento.toUpperCase()} ({os.forma_pagamento})
-                              </span>
-                            </div>
-                            <p className="text-gray-300 mt-1">{os.problema_relatado || 'Nenhum defeito detalhado.'}</p>
-                            <span className="text-[10px] text-gray-500 block mt-1">Data: {new Date(os.criado_em).toLocaleDateString()}</span>
-                          </div>
-
-                          <div className="text-right font-black text-white text-sm">
-                            R$ {Number(os.valor_total).toFixed(2)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-500 italic py-2">Nenhuma ordem de serviço cadastrada para este cliente ainda.</p>
-                  )}
-
-                </div>
-              )}
-
+              <div className="text-right">
+                <span className="font-black text-green-400 block">Lucro Unit: R$ {Number(p.lucro_unitario).toFixed(2)}</span>
+              </div>
             </div>
-          );
-        })}
-
-        {clientes.length === 0 && (
-          <p className="text-xs text-gray-500 text-center py-8">Nenhum cliente cadastrado no banco de dados.</p>
-        )}
+          ))}
+          {listaPecas.length === 0 && (
+            <p className="text-xs text-gray-500 text-center py-4">Nenhuma peça cadastrada isoladamente ainda.</p>
+          )}
+        </div>
       </div>
-
     </div>
   );
 }
