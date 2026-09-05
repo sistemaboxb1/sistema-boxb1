@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import Login from './app/components/Login';
-import AdminDashboard from './app/components/AdminDashboard';
-import FuncionarioDashboard from './app/components/FuncionarioDashboard';
+import Login from './components/Login';
+import AdminDashboard from './components/AdminDashboard';
+import FuncionarioDashboard from './components/FuncionarioDashboard';
 
 export default function Home() {
   const [sessaoAtiva, setSessaoAtiva] = useState<boolean>(false);
@@ -21,11 +21,9 @@ export default function Home() {
           const email = session.user.email || '';
           setEmailUsuario(email);
 
-          // REGRA DE OURO: Se o e-mail for do Izaias, força imediatamente o cargo de admin
           if (email.toLowerCase().includes('izaias')) {
             setCargoUsuario('admin');
           } else {
-            // Caso contrário, busca na tabela perfis do Supabase
             const { data: perfilData } = await supabase
               .from('perfis')
               .select('role')
@@ -53,14 +51,11 @@ export default function Home() {
 
   const lidarComLoginSucesso = (role: 'admin' | 'funcionario', email: string) => {
     setEmailUsuario(email);
-    
-    // Força admin se o e-mail pertencer ao Izaias
     if (email.toLowerCase().includes('izaias')) {
       setCargoUsuario('admin');
     } else {
       setCargoUsuario(role);
     }
-    
     setSessaoAtiva(true);
   };
 
@@ -90,11 +85,9 @@ export default function Home() {
     return <Login onLoginSuccess={lidarComLoginSucesso} />;
   }
 
-  // Renderização blindada: se for admin (Izaias), exibe obrigatoriamente o painel completo da diretoria
   if (cargoUsuario === 'admin') {
     return <AdminDashboard emailUsuario={emailUsuario} onLogout={lidarComLogout} />;
   }
 
-  // Caso contrário, exibe o painel do funcionário
   return <FuncionarioDashboard emailUsuario={emailUsuario} onLogout={lidarComLogout} />;
 }
