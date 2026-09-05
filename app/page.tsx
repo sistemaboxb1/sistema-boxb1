@@ -1,66 +1,55 @@
 'use client';
-import { useState } from 'react';
 
-export default function Login() {
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
+import { useState, useEffect } from 'react';
+import Login from './components/Login';
+import AdminDashboard from './components/AdminDashboard';
+import FuncionarioDashboard from './components/FuncionarioDashboard';
 
-  const fazerLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    alert(`Entrando com o e-mail: ${email}`);
+export default function Home() {
+  const [usuarioLogado, setUsuarioLogado] = useState<{ role: 'admin' | 'funcionario'; email: string } | null>(null);
+  const [carregandoSessao, setCarregandoSessao] = useState<boolean>(true);
+
+  // Efeito para verificar se já existe uma sessão salva no navegador
+  useEffect(() => {
+    const usuarioSalvo = localStorage.getItem('boxb1_user_session');
+    if (usuarioSalvo) {
+      try {
+        const dados = JSON.parse(usuarioSalvo);
+        setUsuarioLogado(dados);
+      } catch (e) {
+        localStorage.removeItem('boxb1_user_session');
+      }
+    }
+    setCarregandoSessao(false);
+  }, []);
+
+  const lidarComSucessoLogin = (role: 'admin' | 'funcionario', email: string) => {
+    const dadosSessao = { role, email };
+    setUsuarioLogado(dadosSessao);
+    localStorage.setItem('boxb1_user_session', JSON.stringify(dadosSessao));
   };
 
-  return (
-    <div className="flex h-screen items-center justify-center bg-gray-900">
-      <div className="w-full max-w-md bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-8">
-        
-        {/* Cabeçalho */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-extrabold text-white tracking-wider mb-2">
-            BOX<span className="text-yellow-500">B1</span>
-          </h1>
-          <p className="text-gray-400 text-sm">Sistema de Gestão Automotiva</p>
-        </div>
+  const lidarComLogout = () => {
+    setUsuarioLogado(null);
+    localStorage.removeItem('boxb1_user_session');
+  };
 
-        {/* Formulário */}
-        <form onSubmit={fazerLogin} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              E-mail de Acesso
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 text-white"
-              placeholder="exemplo@boxb1.com"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Senha
-            </label>
-            <input
-              type="password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 text-white"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 shadow-md"
-          >
-            Entrar no Sistema
-          </button>
-        </form>
-
+  if (carregandoSessao) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-950 text-white">
+        <p className="text-sm font-medium animate-pulse text-gray-400">Carregando Sistema BOXB1...</p>
       </div>
-    </div>
-  );
+    );
+  }
+
+  // Roteamento condicional baseado no perfil autenticado
+  if (!usuarioLogado) {
+    return <Login onLoginSuccess={lidarComSucessoLogin} />;
+  }
+
+  if (usuarioLogado.role === 'admin') {
+    return <AdminDashboard emailUsuario={usuarioLogado.email} onLogout={lidarComLogout} />;
+  }
+
+  return <FuncionarioDashboard emailUsuario={usuarioLogado.email} onLogout={lidarComLogout} />;
 }
