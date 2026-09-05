@@ -111,6 +111,31 @@ export default function PainelGestaoClientes() {
     }
   };
 
+  const excluirCliente = async (clienteId: string) => {
+    if (!confirm('Deseja realmente excluir este cliente e todo o seu histórico vinculado?')) return;
+    try {
+      const { error } = await supabase.from('clientes').delete().eq('id', clienteId);
+      if (error) throw error;
+      setMensagem('Cliente excluído com sucesso.');
+      setClienteSelecionado(null);
+      carregarClientes();
+    } catch (err: any) {
+      alert('Erro ao excluir cliente: ' + err.message);
+    }
+  };
+
+  const excluirOs = async (osId: string) => {
+    if (!confirm('Deseja realmente excluir esta Ordem de Serviço?')) return;
+    try {
+      const { error } = await supabase.from('ordens_servico').delete().eq('id', osId);
+      if (error) throw error;
+      setMensagem('Ordem de serviço excluída com sucesso.');
+      carregarClientes();
+    } catch (err: any) {
+      alert('Erro ao excluir O.S.: ' + err.message);
+    }
+  };
+
   if (carregando) {
     return <div className="text-white text-xs p-6">Carregando lista de clientes...</div>;
   }
@@ -120,7 +145,7 @@ export default function PainelGestaoClientes() {
       <div className="flex justify-between items-center border-b border-gray-800 pb-4">
         <div>
           <h3 className="text-xl font-black text-white">Lista de Clientes & Histórico de O.S.</h3>
-          <p className="text-xs text-gray-400 mt-1">Clique em um cliente para ver e editar suas Ordens de Serviço e dados cadastrais.</p>
+          <p className="text-xs text-gray-400 mt-1">Clique em um cliente para ver, editar ou excluir dados cadastrais e Ordens de Serviço.</p>
         </div>
         <button onClick={carregarClientes} className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-xs py-2 px-4 rounded-lg cursor-pointer">
           🔄 Atualizar
@@ -134,7 +159,6 @@ export default function PainelGestaoClientes() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Coluna Lateral com a Lista de Clientes */}
         <div className="md:col-span-1 bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-2 max-h-[600px] overflow-y-auto">
           <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500 mb-3">Todos os Clientes ({clientes.length})</h4>
           {clientes.map((cli) => (
@@ -153,12 +177,9 @@ export default function PainelGestaoClientes() {
           {clientes.length === 0 && <p className="text-xs text-gray-500 text-center py-4">Nenhum cliente cadastrado.</p>}
         </div>
 
-        {/* Coluna Principal com os Detalhes do Cliente Selecionado e O.S. */}
         <div className="md:col-span-2 bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-6">
           {clienteSelecionado ? (
             <div className="space-y-6">
-              
-              {/* Dados do Cliente com Opção de Editar */}
               <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex justify-between items-center">
                 {editandoClienteId === clienteSelecionado.id ? (
                   <div className="space-y-2 w-full">
@@ -174,14 +195,18 @@ export default function PainelGestaoClientes() {
                   </div>
                 )}
 
-                {editandoClienteId !== clienteSelecionado.id && (
-                  <button onClick={() => { setEditandoClienteId(clienteSelecionado.id); setNovoNomeCliente(clienteSelecionado.nome); setNovoTelefoneCliente(clienteSelecionado.telefone); }} className="bg-gray-800 hover:bg-gray-700 text-xs px-3 py-1.5 rounded font-bold text-gray-200">
-                    Editar Cliente
+                <div className="flex items-center space-x-2">
+                  {editandoClienteId !== clienteSelecionado.id && (
+                    <button onClick={() => { setEditandoClienteId(clienteSelecionado.id); setNovoNomeCliente(clienteSelecionado.nome); setNovoTelefoneCliente(clienteSelecionado.telefone); }} className="bg-gray-800 hover:bg-gray-700 text-xs px-3 py-1.5 rounded font-bold text-gray-200">
+                      Editar
+                    </button>
+                  )}
+                  <button onClick={() => excluirCliente(clienteSelecionado.id)} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-700/50 px-3 py-1.5 rounded text-xs font-bold cursor-pointer">
+                    🗑️ Excluir Cliente
                   </button>
-                )}
+                </div>
               </div>
 
-              {/* Lista de Ordens de Serviço do Cliente com Opção de Edição */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500">Ordens de Serviço de {clienteSelecionado.nome}</h4>
                 
@@ -207,10 +232,15 @@ export default function PainelGestaoClientes() {
                             <p className="text-gray-300">{os.problema_relatado}</p>
                             <span className="text-[10px] text-gray-500 mt-1 block">Criado em: {new Date(os.criado_em).toLocaleDateString()}</span>
                           </div>
-                          <div className="text-right">
-                            <span className="font-black text-white text-sm block">R$ {Number(os.valor_total).toFixed(2)}</span>
-                            <button onClick={() => { setEditandoOsId(os.id); setNovoProblemaOs(os.problema_relatado); setNovoValorOs(os.valor_total.toString()); }} className="text-blue-400 hover:text-blue-300 font-bold mt-1 block">
-                              Editar O.S.
+                          <div className="text-right flex items-center space-x-3">
+                            <div>
+                              <span className="font-black text-white text-sm block">R$ {Number(os.valor_total).toFixed(2)}</span>
+                            </div>
+                            <button onClick={() => { setEditandoOsId(os.id); setNovoProblemaOs(os.problema_relatado); setNovoValorOs(os.valor_total.toString()); }} className="text-blue-400 hover:text-blue-300 font-bold">
+                              Editar
+                            </button>
+                            <button onClick={() => excluirOs(os.id)} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-700/50 px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer">
+                              Excluir
                             </button>
                           </div>
                         </div>

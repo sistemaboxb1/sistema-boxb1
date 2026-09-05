@@ -1,44 +1,41 @@
 'use client';
 
-import React, { useState, FormEvent, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
 interface ItemBoleto {
-  id: string;
-  peca: string;
+  id?: string;
+  nome_peca: string;
   quantidade: number;
-  valorUnitario: number;
+  valor_unitario: number;
 }
 
 interface BoletoRegistro {
   id: string;
-  codigo_boleto: string;
-  revendedor: string;
+  fornecedor: string;
+  numero_boleto: string;
   valor_total: number;
-  data_validade: string;
-  foto_url: string;
-  status: 'pendente' | 'pago';
+  data_vencimento: string;
+  foto_url?: string;
+  status: string;
+  itens?: ItemBoleto[];
 }
 
 export default function PainelBoletosPecas() {
-  const [revendedor, setRevendedor] = useState<string>('Auto Peças Distribuidora B1');
-  const [dataValidade, setDataValidade] = useState<string>('');
-  const [fotoBoleto, setFotoBoleto] = useState<File | null>(null);
+  const [fornecedor, setFornecedor] = useState<string>('');
+  const [numeroBoleto, setNumeroBoleto] = useState<string>('');
+  const [valorTotal, setValorTotal] = useState<string>('');
+  const [dataVencimento, setDataVencimento] = useState<string>('');
+  const [fotoUrl, setFotoUrl] = useState<string>('');
   
-  const [itensBoleto, setItensBoleto] = useState<ItemBoleto[]>([
-    { id: '1', peca: 'Kit Embreagem Corsa 1.8', quantidade: 1, valorUnitario: 380.00 },
-    { id: '2', peca: 'Amortecedor Dianteiro Par', quantidade: 1, valorUnitario: 450.00 }
-  ]);
+  const [itens, setItens] = useState<ItemBoleto[]>([]);
+  const [pecaNome, setPecaNome] = useState<string>('');
+  const [pecaQtd, setPecaQtd] = useState<string>('1');
+  const [pecaValor, setPecaValor] = useState<string>('');
 
-  const [pecaInput, setPecaInput] = useState<string>('');
-  const [qtdInput, setQtdInput] = useState<string>('1');
-  const [valorUnitInput, setValorUnitInput] = useState<string>('');
-  
-  const [boletosSalvos, setBoletosSalvos] = useState<BoletoRegistro[]>([]);
-  const [salvando, setSalvando] = useState<boolean>(false);
+  const [listaBoletos, setListaBoletos] = useState<BoletoRegistro[]>([]);
   const [mensagem, setMensagem] = useState<string>('');
 
-  // Busca os boletos salvos no Supabase ao carregar a página
   useEffect(() => {
     carregarBoletos();
   }, []);
@@ -48,239 +45,235 @@ export default function PainelBoletosPecas() {
       const { data, error } = await supabase
         .from('boletos_pecas')
         .select('*')
-        .order('criado_em', { ascending: false });
+        .order('data_vencimento', { ascending: true });
 
       if (error) throw error;
-      if (data) setBoletosSalvos(data);
+      if (data) setListaBoletos(data);
     } catch (err) {
-      console.error('Erro ao buscar boletos:', err);
+      console.error('Erro ao carregar boletos:', err);
     }
   };
 
-  const adicionarItemBoleto = () => {
-    if (!pecaInput.trim() || !valorUnitInput) return;
-    const novoItem: ItemBoleto = {
-      id: Date.now().toString(),
-      peca: pecaInput.trim(),
-      quantidade: parseInt(qtdInput) || 1,
-      valorUnitario: parseFloat(valorUnitInput) || 0
-    };
-    setItensBoleto([...itensBoleto, novoItem]);
-    setPecaInput('');
-    setQtdInput('1');
-    setValorUnitInput('');
+  const adicionarItemLista = () => {
+    if (!pecaNome.trim() || !pecaValor) return;
+    setItens([
+      ...itens,
+      {
+        nome_peca: pecaNome.trim(),
+        quantidade: parseInt(pecaQtd) || 1,
+        valor_unitario: parseFloat(pecaValor) || 0
+      }
+    ]);
+    setPecaNome('');
+    setPecaQtd('1');
+    setPecaValor('');
   };
 
-  const removerItemBoleto = (id: string) => {
-    setItensBoleto(itensBoleto.filter(i => i.id !== id));
+  const removerItemLista = (index: number) => {
+    setItens(itens.filter((_, i) => i !== index));
   };
 
-  const lidarComEnvioBoleto = async (e: FormEvent<HTMLFormElement>) => {
+  const salvarBoletoSupabase = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSalvando(true);
     setMensagem('');
 
     try {
-      const valorTotalCalc = itensBoleto.reduce((acc, i) => acc + (i.quantidade * i.valorUnitario), 0);
-      const codigoGerado = `BOL-${Math.floor(100 + Math.random() * 900)}`;
-
-      // 1. Salva o boleto principal no Supabase
-      const { data: boletoData, error: boletoError } = await supabase
+      const { data: boletoCriado, error: errBoleto } = await supabase
         .from('boletos_pecas')
-        .insert([
-          {
-            codigo_boleto: codigoGerado,
-            revendedor: revendedor.trim(),
-            valor_total: valorTotalCalc,
-            data_validade: dataValidade,
-            foto_url: fotoBoleto ? fotoBoleto.name : 'sem_foto.png',
-            status: 'pendente'
-          }
-        ])
+        .insert([{
+          fornecedor: fornecedor.trim(),
+          numero_boleto: numeroBoleto.trim(),
+          valor_total: parseFloat(valorTotal) || 0,
+          data_vencimento: dataVencimento,
+          foto_url: fotoUrl.trim() || null,
+          status: 'pendente'
+        }])
         .select()
         .single();
 
-      if (boletoError) throw boletoError;
-      const boletoId = boletoData.id;
+      if (errBoleto) throw errBoleto;
 
-      // 2. Salva os itens discriminados do boleto
-      if (itensBoleto.length > 0) {
-        const itensFormatados = itensBoleto.map(item => ({
-          boleto_id: boletoId,
-          peca: item.peca,
-          quantidade: item.quantidade,
-          valor_unitario: item.valorUnitario
+      if (itens.length > 0 && boletoCriado) {
+        const itensParaSalvar = itens.map(i => ({
+          boleto_id: boletoCriado.id,
+          nome_peca: i.nome_peca,
+          quantidade: i.quantidade,
+          valor_unitario: i.valor_unitario
         }));
 
-        const { error: itensError } = await supabase
-          .from('itens_boletos')
-          .insert(itensFormatados);
-
-        if (itensError) throw itensError;
+        const { error: errItens } = await supabase.from('itens_boletos').insert(itensParaSalvar);
+        if (errItens) throw errItens;
       }
 
-      setMensagem('Boleto, itens e foto salvos com sucesso no Supabase!');
-      setRevendedor('');
-      setDataValidade('');
-      setFotoBoleto(null);
-      setItensBoleto([]);
-      carregarBoletos(); // Atualiza a lista na tela
-
+      setMensagem('Boleto e peças detalhadas salvos com sucesso!');
+      setFornecedor('');
+      setNumeroBoleto('');
+      setValorTotal('');
+      setDataVencimento('');
+      setFotoUrl('');
+      setItens([]);
+      carregarBoletos();
     } catch (err: any) {
-      console.error('Erro ao salvar boleto:', err);
-      setMensagem('Erro ao salvar boleto: ' + (err.message || 'Erro desconhecido'));
-    } finally {
-      setSalvando(false);
+      setMensagem('Erro ao salvar boleto: ' + err.message);
+    }
+  };
+
+  const excluirBoleto = async (id: string) => {
+    if (!confirm('Deseja realmente excluir este boleto?')) return;
+    try {
+      const { error } = await supabase.from('boletos_pecas').delete().eq('id', id);
+      if (error) throw error;
+      setMensagem('Boleto excluído com sucesso.');
+      carregarBoletos();
+    } catch (err: any) {
+      alert('Erro ao excluir boleto: ' + err.message);
     }
   };
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl space-y-8">
-      
       <div>
-        <h3 className="text-xl font-black text-white">Painel de Boletos de Revendedores de Peças (Supabase)</h3>
-        <p className="text-xs text-gray-400 mt-1">
-          Registre contas a pagar, anexe a foto do boleto físico, defina validade e detalhe peça por peça com persistência real.
-        </p>
+        <h3 className="text-xl font-black text-white">Painel de Boletos de Revendedores de Peças</h3>
+        <p className="text-xs text-gray-400 mt-1">Registre contas a pagar, anexe comprovantes e gerencie o estoque detalhado por peça.</p>
       </div>
 
       {mensagem && (
-        <div className="rounded-lg bg-gray-950 border border-gray-800 p-3 text-xs text-yellow-400 font-semibold">
+        <div className="bg-gray-950 p-3 rounded border border-gray-800 text-xs text-yellow-400 font-semibold">
           {mensagem}
         </div>
       )}
 
-      {/* Formulário de Cadastro de Boleto */}
-      <form onSubmit={lidarComEnvioBoleto} className="space-y-6 bg-gray-950 p-6 rounded-xl border border-gray-800">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500">Cadastrar Novo Boleto de Peças</h4>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <form onSubmit={salvarBoletoSupabase} className="space-y-6 bg-gray-950 p-6 rounded-xl border border-gray-800">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Revendedor / Fornecedor</label>
+            <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Fornecedor / Loja de Peças</label>
             <input 
               type="text" 
-              value={revendedor}
-              onChange={(e) => setRevendedor(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
-              required
+              value={fornecedor} 
+              onChange={(e) => setFornecedor(e.target.value)} 
+              placeholder="Ex: Distribuidora AutoPeças X"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+              required 
             />
           </div>
-
           <div>
-            <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Data de Validade (Vencimento)</label>
+            <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Número do Boleto / Linha Digitável</label>
+            <input 
+              type="text" 
+              value={numeroBoleto} 
+              onChange={(e) => setNumeroBoleto(e.target.value)} 
+              placeholder="Ex: 34191.79001 01043..."
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+              required 
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Valor Total (R$)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              value={valorTotal} 
+              onChange={(e) => setValorTotal(e.target.value)} 
+              placeholder="0.00"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+              required 
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Data de Vencimento</label>
             <input 
               type="date" 
-              value={dataValidade}
-              onChange={(e) => setDataValidade(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Foto / Imagem do Boleto</label>
-            <input 
-              type="file" 
-              accept="image/*,application/pdf"
-              onChange={(e) => e.target.files && setFotoBoleto(e.target.files[0])}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white cursor-pointer"
+              value={dataVencimento} 
+              onChange={(e) => setDataVencimento(e.target.value)} 
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+              required 
             />
           </div>
         </div>
 
-        {/* Detalhamento de Itens do Boleto */}
-        <div className="space-y-3 pt-2 border-t border-gray-800">
-          <span className="block text-xs font-bold uppercase text-gray-300">Detalhamento das Peças Contidas no Boleto</span>
-          
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="md:col-span-2">
-              <input 
-                type="text" 
-                placeholder="Nome da peça..."
-                value={pecaInput}
-                onChange={(e) => setPecaInput(e.target.value)}
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
-              />
-            </div>
-            <div>
-              <input 
-                type="number" 
-                min="1"
-                placeholder="Qtd"
-                value={qtdInput}
-                onChange={(e) => setQtdInput(e.target.value)}
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
-              />
-            </div>
+        <div>
+          <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Link da Foto ou Comprovante do Boleto (Opcional)</label>
+          <input 
+            type="text" 
+            value={fotoUrl} 
+            onChange={(e) => setFotoUrl(e.target.value)} 
+            placeholder="https://exemplo.com/foto-boleto.jpg"
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+          />
+        </div>
+
+        {/* Detalhamento de Peça por Peça */}
+        <div className="border-t border-gray-800 pt-4 space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500">Detalhar Peças deste Boleto</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input 
+              type="text" 
+              placeholder="Nome da peça..." 
+              value={pecaNome} 
+              onChange={(e) => setPecaNome(e.target.value)} 
+              className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white md:col-span-1" 
+            />
+            <input 
+              type="number" 
+              placeholder="Qtd" 
+              value={pecaQtd} 
+              onChange={(e) => setPecaQtd(e.target.value)} 
+              className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+            />
             <div className="flex space-x-2">
               <input 
                 type="number" 
-                step="0.01"
-                placeholder="Valor Unit. R$"
-                value={valorUnitInput}
-                onChange={(e) => setValorUnitInput(e.target.value)}
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
+                step="0.01" 
+                placeholder="Valor Unitário R$" 
+                value={pecaValor} 
+                onChange={(e) => setPecaValor(e.target.value)} 
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
               />
-              <button 
-                type="button"
-                onClick={adicionarItemBoleto}
-                className="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded-lg text-xs font-bold text-white cursor-pointer"
-              >
-                +
-              </button>
+              <button type="button" onClick={adicionarItemLista} className="bg-blue-600 px-4 py-2 rounded-lg text-xs font-bold text-white cursor-pointer">+</button>
             </div>
           </div>
 
-          <div className="divide-y divide-gray-800">
-            {itensBoleto.map((item) => (
-              <div key={item.id} className="py-2 flex justify-between items-center text-xs">
-                <span className="text-gray-300">{item.quantidade}x {item.peca}</span>
-                <div className="flex items-center space-x-4">
-                  <span className="text-yellow-500 font-bold">R$ {(item.quantidade * item.valorUnitario).toFixed(2)}</span>
-                  <button type="button" onClick={() => removerItemBoleto(item.id)} className="text-red-400 hover:text-red-300">✕</button>
-                </div>
+          <div className="space-y-1">
+            {itens.map((item, idx) => (
+              <div key={idx} className="bg-gray-900 p-2 rounded flex justify-between items-center text-xs">
+                <span>{item.quantidade}x {item.nome_peca} - R$ {item.valor_unitario.toFixed(2)} un.</span>
+                <button type="button" onClick={() => removerItemLista(idx)} className="text-red-400 font-bold">✕</button>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="pt-2">
-          <button 
-            type="submit"
-            disabled={salvando}
-            className="w-full bg-green-600 hover:bg-green-500 text-white font-bold text-xs py-3 rounded-lg transition-all cursor-pointer shadow-md disabled:opacity-50"
-          >
-            {salvando ? 'Salvando no Banco...' : 'Salvar Boleto, Foto e Itens no Supabase'}
-          </button>
-        </div>
+        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3 rounded-lg cursor-pointer">
+          Salvar Boleto e Itens no Sistema
+        </button>
       </form>
 
-      {/* Lista de Boletos Registrados no Supabase */}
-      <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Boletos Cadastrados (Banco de Dados)</h4>
-        
-        <div className="space-y-4">
-          {boletosSalvos.map((bol) => (
-            <div key={bol.id} className="bg-gray-900 border border-gray-800 p-4 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* Lista de Boletos Cadastrados com Botão de Excluir */}
+      <div className="space-y-4">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Boletos Registrados</h4>
+        <div className="space-y-3">
+          {listaBoletos.map((b) => (
+            <div key={b.id} className="bg-gray-950 p-4 rounded-xl border border-gray-800 flex justify-between items-center text-xs">
               <div>
-                <span className="text-xs font-bold text-yellow-500">{bol.codigo_boleto} - {bol.revendedor}</span>
-                <p className="text-sm font-black text-white mt-0.5">Total: R$ {Number(bol.valor_total).toFixed(2)}</p>
-                <p className="text-[11px] text-gray-400 mt-1">Vencimento: <strong className="text-red-400">{bol.data_validade}</strong> | Arquivo: {bol.foto_url}</p>
+                <span className="font-bold text-yellow-500 text-sm">{b.fornecedor}</span>
+                <p className="text-gray-400 mt-0.5">Boleto: {b.numero_boleto} | Vencimento: {b.data_vencimento}</p>
               </div>
-
-              <div className="text-right">
-                <span className="inline-block px-3 py-1 rounded-full text-[10px] font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 mb-2">
-                  {bol.status.toUpperCase()}
-                </span>
+              <div className="flex items-center space-x-4">
+                <div className="text-right">
+                  <span className="font-black text-green-400 text-sm block">R$ {Number(b.valor_total).toFixed(2)}</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-500/10 text-yellow-400 uppercase">{b.status}</span>
+                </div>
+                <button onClick={() => excluirBoleto(b.id)} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-700/50 px-2.5 py-1.5 rounded font-bold cursor-pointer">
+                  🗑️ Excluir
+                </button>
               </div>
             </div>
           ))}
-          {boletosSalvos.length === 0 && (
-            <p className="text-xs text-gray-500 text-center py-4">Nenhum boleto cadastrado no banco ainda.</p>
+          {listaBoletos.length === 0 && (
+            <p className="text-xs text-gray-500 text-center py-4">Nenhum boleto cadastrado até o momento.</p>
           )}
         </div>
       </div>
-
     </div>
   );
 }
