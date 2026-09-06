@@ -2,22 +2,41 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import ComandaDigitalOS from './ComandaDigitalOS';
 
 interface AdminFinanceiroMasterProps {
   emailUsuario: string;
   onLogout: () => void;
 }
 
+interface Despesa {
+  id: string;
+  descricao: string;
+  categoria: string;
+  valor: number;
+  data_vencimento: string;
+  status: string;
+}
+
 export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminFinanceiroMasterProps) {
-  const [abaAtiva, setAbaAtiva] = useState<'visao-geral' | 'pecas' | 'clientes' | 'boletos'>('visao-geral');
+  const [abaAtiva, setAbaAtiva] = useState<'visao-geral' | 'comanda' | 'despesas' | 'pecas' | 'clientes' | 'boletos'>('visao-geral');
   const [carregando, setCarregando] = useState<boolean>(true);
 
   // Estados dos dados consolidados
   const [faturamentoTotal, setFaturamentoTotal] = useState<number>(0);
+  const [faturamentoMes, setFaturamentoMes] = useState<number>(0);
   const [totalOrdens, setTotalOrdens] = useState<number>(0);
   const [listaPecas, setListaPecas] = useState<any[]>([]);
   const [listaClientes, setListaClientes] = useState<any[]>([]);
   const [listaBoletos, setListaBoletos] = useState<any[]>([]);
+  
+  // Estados para Despesas/Gastos (Funcionários, Luz, Energia, Maquininha, etc.)
+  const [listaDespesas, setListaDespesas] = useState<Despesa[]>([]);
+  const [descDespesa, setDescDespesa] = useState<string>('');
+  const [catDespesa, setCatDespesa] = useState<string>('luz_energia');
+  const [valorDespesa, setValorDespesa] = useState<string>('');
+  const [dataDespesa, setDataDespesa] = useState<string>('');
+  const [mensagemDespesa, setMensagemDespesa] = useState<string>('');
 
   useEffect(() => {
     carregarDadosAdmin();
@@ -30,11 +49,18 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
       const { data: osData } = await supabase.from('ordens_servico').select('*');
       if (osData) {
         setTotalOrdens(osData.length);
-        const soma = osData.reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
-        setFaturamentoTotal(soma);
+        const somaTotal = osData.reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
+        setFaturamentoTotal(somaTotal);
+
+        // Faturamento do mês atual
+        const mesAtual = new Date().toISOString().slice(0, 7); // YYYY-MM
+        const somaMes = osData
+          .filter(os => os.criado_em && os.criado_em.startsWith(mesAtual))
+          .reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
+        setFaturamentoMes(somaMes);
       }
 
-      // Carregar Peças Cadastradas
+      // Carregar Peças
       const { data: pecasData } = await supabase.from('pecas_cadastradas').select('*').order('criado_em', { ascending: false });
       if (pecasData) setListaPecas(pecasData);
 
@@ -46,12 +72,53 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
       const { data: bolData } = await supabase.from('boletos_pecas').select('*').order('data_vencimento', { ascending: true });
       if (bolData) setListaBoletos(bolData);
 
+      // Carregar Despesas (tabela despesas_oficina)
+      const { data: despData } = await supabase.from('despesas_oficina').select('*').order('data_vencimento', { ascending: true });
+      if (despData) setListaDespesas(despData);
+
     } catch (err) {
       console.error('Erro ao carregar dados do admin:', err);
     } finally {
       setCarregando(false);
     }
   };
+
+  const cadastrarDespesa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMensagemDespesa('');
+    try {
+      const { error } = await supabase.from('despesas_oficina').insert([{
+        descricao: descDespesa.trim(),
+        categoria: catDespesa,
+        valor: parseFloat(valorDespesa) || 0,
+        data_vencimento: dataDespesa,
+        status: 'pendente'
+      }]);
+
+      if (error) throw error;
+
+      setMensagemDespesa('Despesa cadastrada com sucesso!');
+      setDescDespesa('');
+      setValorDespesa('');
+      setDataDespesa('');
+      carregarDadosAdmin();
+    } catch (err: any) {
+      setMensagemDespesa('Erro ao cadastrar despesa: ' + err.message);
+    }
+  };
+
+  const excluirDespesa = async (id: string) => {
+    if (!confirm('Deseja excluir esta despesa?')) return;
+    try {
+      const { error } = await supabase.from('despesas_oficina').delete().eq('id', id);
+      if (error) throw error;
+      carregarDadosAdmin();
+    } catch (err: any) {
+      alert('Erro ao excluir: ' + err.message);
+    }
+  };
+
+  const totalDespesas = listaDespesas.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
 
   return (
     <div className="flex min-h-screen bg-gray-950 text-white">
@@ -75,7 +142,25 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                 abaAtiva === 'visao-geral' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <span>📊 Visão Geral & Faturamento</span>
+              <span>📊 Visão Geral & Caixa do Mês</span>
+            </button>
+
+            <button
+              onClick={() => setAbaAtiva('comanda')}
+              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
+                abaAtiva === 'comanda' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <span>📋 Comanda Digital (Admin)</span>
+            </button>
+
+            <button
+              onClick={() => setAbaAtiva('despesas')}
+              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
+                abaAtiva === 'despesas' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <span>💸 Gastos & Despesas (Luz, Maquininha)</span>
             </button>
 
             <button
@@ -142,23 +227,129 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
             <>
               {abaAtiva === 'visao-geral' && (
                 <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl">
-                      <span className="text-xs uppercase font-bold text-gray-400">Faturamento Consolidado (O.S.)</span>
-                      <h2 className="text-3xl font-black text-green-400 mt-2">R$ {faturamentoTotal.toFixed(2)}</h2>
-                      <p className="text-[11px] text-gray-500 mt-1">Soma de todas as ordens de serviço registradas.</p>
+                      <span className="text-xs uppercase font-bold text-gray-400">Recebidos no Mês Atual</span>
+                      <h2 className="text-3xl font-black text-green-400 mt-2">R$ {faturamentoMes.toFixed(2)}</h2>
+                      <p className="text-[11px] text-gray-500 mt-1">Valores de O.S. faturados neste mês.</p>
                     </div>
 
                     <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl">
-                      <span className="text-xs uppercase font-bold text-gray-400">Total de Ordens Emitidas</span>
-                      <h2 className="text-3xl font-black text-yellow-500 mt-2">{totalOrdens}</h2>
-                      <p className="text-[11px] text-gray-500 mt-1">Serviços executados na oficina.</p>
+                      <span className="text-xs uppercase font-bold text-gray-400">Faturamento Consolidado Geral</span>
+                      <h2 className="text-3xl font-black text-blue-400 mt-2">R$ {faturamentoTotal.toFixed(2)}</h2>
+                      <p className="text-[11px] text-gray-500 mt-1">Soma total de todas as ordens de serviço.</p>
+                    </div>
+
+                    <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl">
+                      <span className="text-xs uppercase font-bold text-gray-400">Total de Gastos / Despesas</span>
+                      <h2 className="text-3xl font-black text-red-400 mt-2">R$ {totalDespesas.toFixed(2)}</h2>
+                      <p className="text-[11px] text-gray-500 mt-1">Luz, funcionários, maquininha, etc.</p>
                     </div>
                   </div>
 
                   <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl space-y-4">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-white">Resumo Rápido das Atividades</h3>
-                    <p className="text-xs text-gray-400">Utilize o menu lateral para navegar entre o controle de peças cadastradas pelos funcionários, listagem completa de clientes e boletos pendentes.</p>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-white">Indicadores e Controle Executivo</h3>
+                    <p className="text-xs text-gray-400">O painel está integrado com as informações lançadas pela equipe operacional. Navegue pelas abas ao lado para gerenciar comandas, despesas, margens de peças, clientes e boletos.</p>
+                  </div>
+                </div>
+              )}
+
+              {abaAtiva === 'comanda' && (
+                <div className="space-y-6">
+                  <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl mb-4">
+                    <h3 className="text-xl font-black text-white">Comanda Digital & Registro Executivo</h3>
+                    <p className="text-xs text-gray-400 mt-1">Como administrador (Izaias), você também pode emitir e registrar ordens de serviço diretamente por aqui.</p>
+                  </div>
+                  <ComandaDigitalOS />
+                </div>
+              )}
+
+              {abaAtiva === 'despesas' && (
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-xl space-y-6">
+                  <div>
+                    <h3 className="text-xl font-black text-white">Controle de Gastos & Despesas da Oficina</h3>
+                    <p className="text-xs text-gray-400 mt-1">Cadastre custos fixos e variáveis como funcionários, luz, energia, taxas da maquininha de cartão, aluguel, etc.</p>
+                  </div>
+
+                  {mensagemDespesa && (
+                    <div className="bg-gray-950 p-3 rounded border border-gray-800 text-xs text-yellow-400 font-semibold">
+                      {mensagemDespesa}
+                    </div>
+                  )}
+
+                  <form onSubmit={cadastrarDespesa} className="space-y-4 bg-gray-950 p-6 rounded-xl border border-gray-800">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Descrição do Gasto</label>
+                        <input 
+                          type="text" 
+                          value={descDespesa} 
+                          onChange={(e) => setDescDespesa(e.target.value)} 
+                          placeholder="Ex: Conta de Luz / Maquininha / Salário Mecânico"
+                          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                          required 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Categoria</label>
+                        <select 
+                          value={catDespesa} 
+                          onChange={(e) => setCatDespesa(e.target.value)} 
+                          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
+                        >
+                          <option value="luz_energia">Luz / Energia</option>
+                          <option value="funcionario">Funcionários / Salários</option>
+                          <option value="maquininha">Taxas de Maquininha</option>
+                          <option value="aluguel">Aluguel / Imóvel</option>
+                          <option value="agua">Água</option>
+                          <option value="outros">Outros Custos</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Valor (R$)</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={valorDespesa} 
+                          onChange={(e) => setValorDespesa(e.target.value)} 
+                          placeholder="0.00"
+                          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                          required 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Data de Vencimento / Pagamento</label>
+                        <input 
+                          type="date" 
+                          value={dataDespesa} 
+                          onChange={(e) => setDataDespesa(e.target.value)} 
+                          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                          required 
+                        />
+                      </div>
+                    </div>
+                    <button type="submit" className="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold text-xs py-3 rounded-lg cursor-pointer">
+                      Salvar Despesa no Sistema
+                    </button>
+                  </form>
+
+                  <div className="space-y-3 pt-4 border-t border-gray-800">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500">Histórico de Gastos Cadastrados</h4>
+                    {listaDespesas.map((d) => (
+                      <div key={d.id} className="bg-gray-950 p-4 rounded-xl border border-gray-800 flex justify-between items-center text-xs">
+                        <div>
+                          <span className="font-bold text-white text-sm">{d.descricao}</span>
+                          <p className="text-gray-400 mt-0.5">Categoria: <span className="uppercase text-yellow-400">{d.categoria}</span> | Vencimento: {d.data_vencimento}</p>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          <span className="font-black text-red-400 text-sm">R$ {Number(d.valor).toFixed(2)}</span>
+                          <button onClick={() => excluirDespesa(d.id)} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-700/50 px-2.5 py-1.5 rounded font-bold cursor-pointer">
+                            🗑️ Excluir
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {listaDespesas.length === 0 && <p className="text-xs text-gray-500 text-center py-6">Nenhuma despesa cadastrada.</p>}
                   </div>
                 </div>
               )}
