@@ -1,11 +1,9 @@
+// app/components/AdminDashboard.tsx
 'use client';
 
-import React, { useState } from 'react';
-import AdminFinanceiro from './AdminFinanceiro';
-import RelatorioContadorCartao from './RelatorioContadorCartao';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import AdminFinanceiroMaster from './AdminFinanceiroMaster';
-import PainelBoletosPecas from './PainelBoletosPecas';
-import PainelClientesCarros from './PainelClientesCarros';
 
 interface AdminDashboardProps {
   emailUsuario: string;
@@ -13,193 +11,134 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboard({ emailUsuario, onLogout }: AdminDashboardProps) {
-  // Estados para gerenciar as abas especializadas da diretoria, preservando todas as abas originais e adicionando as novas
-  const [abaAtiva, setAbaAtiva] = useState<'visao-geral' | 'financeiro' | 'financeiro-master' | 'boletos-pecas' | 'clientes-carros' | 'contador' | 'equipe' | 'configuracoes'>('visao-geral');
+  const [abaAtiva, setAbaAtiva] = useState<'geral' | 'master' | 'pecas' | 'clientes'>('geral');
+  const [carregando, setCarregando] = useState<boolean>(true);
+  const [estatisticas, setEstatisticas] = useState({
+    totalOrdens: 0,
+    faturamentoTotal: 0,
+    clientesCount: 0,
+    pecasCount: 0
+  });
+
+  useEffect(() => {
+    carregarResumoAdmin();
+  }, []);
+
+  const carregarResumoAdmin = async () => {
+    setCarregando(true);
+    try {
+      const { data: osData } = await supabase.from('ordens_servico').select('*');
+      const { data: cliData } = await supabase.from('clientes').select('id');
+      const { data: pecData } = await supabase.from('pecas_cadastradas').select('id');
+
+      const totalOrdens = osData?.length || 0;
+      const faturamentoTotal = (osData || []).reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
+
+      setEstatisticas({
+        totalOrdens,
+        faturamentoTotal,
+        clientesCount: cliData?.length || 0,
+        pecasCount: pecData?.length || 0
+      });
+    } catch (err) {
+      console.error('Erro ao carregar dados do admin:', err);
+    } finally {
+      setCarregando(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-gray-950 text-white">
       
-      {/* Barra Lateral de Navegação (Sidebar) */}
-      <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col justify-between hidden md:flex">
+      <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col justify-between hidden md:flex shadow-xl">
         <div>
-          {/* Logo do Sistema BOXB1 na Lateral */}
           <div className="p-6 border-b border-gray-800">
             <h1 className="text-2xl font-black tracking-wider text-white">
               BOX<span className="text-yellow-500">B1</span>
             </h1>
-            <p className="text-xs font-semibold text-yellow-500/80 uppercase tracking-widest mt-1">
-              Painel Diretoria (Admin)
+            <p className="text-xs font-semibold text-yellow-500 uppercase tracking-widest mt-1">
+              Painel Diretoria
             </p>
           </div>
 
-          {/* Menu de Opções Modulares */}
           <nav className="p-4 space-y-2">
             <button
-              onClick={() => setAbaAtiva('visao-geral')}
+              onClick={() => setAbaAtiva('geral')}
               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'visao-geral' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                abaAtiva === 'geral' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <span>📊 Visão Geral</span>
+              <span>📊 Visão Geral da Oficina</span>
             </button>
 
             <button
-              onClick={() => setAbaAtiva('financeiro')}
+              onClick={() => setAbaAtiva('master')}
               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'financeiro' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                abaAtiva === 'master' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               }`}
             >
-              <span>💰 Caixa & Lançamentos</span>
-            </button>
-
-            <button
-              onClick={() => setAbaAtiva('financeiro-master')}
-              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'financeiro-master' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-              }`}
-            >
-              <span>💎 Financeiro Master & Lucro de Peças</span>
-            </button>
-
-            <button
-              onClick={() => setAbaAtiva('boletos-pecas')}
-              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'boletos-pecas' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-              }`}
-            >
-              <span>🧾 Boletos de Peças & Fotos</span>
-            </button>
-
-            <button
-              onClick={() => setAbaAtiva('clientes-carros')}
-              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'clientes-carros' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-              }`}
-            >
-              <span>🚗 Painel Clientes & Carros</span>
-            </button>
-
-            <button
-              onClick={() => setAbaAtiva('contador')}
-              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'contador' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-              }`}
-            >
-              <span>📑 Relatório Fiscal (Contador)</span>
-            </button>
-
-            <button
-              onClick={() => setAbaAtiva('equipe')}
-              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'equipe' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-              }`}
-            >
-              <span>👥 Gestão de Equipe</span>
-            </button>
-
-            <button
-              onClick={() => setAbaAtiva('configuracoes')}
-              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center space-x-3 cursor-pointer ${
-                abaAtiva === 'configuracoes' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-              }`}
-            >
-              <span>⚙️ Configurações</span>
+              <span>👑 Painel Financeiro Master</span>
             </button>
           </nav>
         </div>
 
-        {/* Rodapé da Sidebar com Identificação do Gestor */}
         <div className="p-4 border-t border-gray-800 bg-gray-950/40">
           <div className="text-xs text-gray-400 mb-2 truncate">
-            Logado como: <strong className="text-gray-200">{emailUsuario}</strong>
+            Admin: <strong className="text-gray-200">{emailUsuario}</strong>
           </div>
           <button
             onClick={onLogout}
-            className="w-full bg-red-600/20 hover:bg-red-600/30 border border-red-700/50 text-red-300 text-xs font-bold py-2 px-3 rounded-lg transition-colors cursor-pointer text-center"
+            className="w-full bg-red-600/25 hover:bg-red-600/40 border border-red-700/50 text-red-300 text-xs font-bold py-2 px-3 rounded-lg transition-colors cursor-pointer text-center"
           >
             Encerrar Sessão
           </button>
         </div>
       </aside>
 
-      {/* Conteúdo Principal da Página */}
       <main className="flex-1 flex flex-col min-w-0">
-        
-        {/* Barra Superior */}
         <header className="h-16 bg-gray-900 border-b border-gray-800 px-6 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <span className="text-sm font-bold uppercase tracking-wider text-gray-400">Módulo Administrativo Master</span>
-          </div>
-          <div className="flex items-center space-x-4">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
-              ⚡ Modo Gerencial Ativo
-            </span>
-          </div>
+          <span className="text-sm font-bold uppercase tracking-wider text-gray-400">Diretoria / Painel Executivo</span>
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+            🛡️ Acesso Administrativo Autorizado
+          </span>
         </header>
 
-        {/* Área Dinâmica baseada na Aba Selecionada */}
         <div className="p-8 overflow-y-auto space-y-6">
-          
-          {abaAtiva === 'visao-geral' && (
+          {abaAtiva === 'geral' && (
             <div className="space-y-6">
-              <div className="bg-gradient-to-r from-gray-900 to-gray-900/60 border border-gray-800 rounded-2xl p-6 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                  <h2 className="text-2xl font-black text-white">Olá, Izaias. Bem-vindo ao BOXB1!</h2>
-                  <p className="text-sm text-gray-400 mt-1">O sistema está operando perfeitamente e integrado ao Supabase.</p>
-                </div>
-                <div className="bg-blue-600/10 border border-blue-500/20 px-4 py-2 rounded-xl text-blue-400 text-xs font-semibold">
-                  Oficina Automotiva Autorizada
-                </div>
+              <div>
+                <h3 className="text-2xl font-black text-white">Resumo Consolidado do Negócio</h3>
+                <p className="text-xs text-gray-400 mt-1">Acompanhe os principais indicadores lançados pela equipe na oficina.</p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-md">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Ordens em Andamento</p>
-                  <p className="text-3xl font-black text-white mt-2">12</p>
-                  <span className="text-xs text-blue-400 mt-2 inline-block">↗ 4 finalizadas hoje</span>
+              {carregando ? (
+                <div className="text-xs text-gray-400">Carregando métricas...</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl">
+                    <span className="text-xs uppercase font-bold text-gray-400">Faturamento Consolidado</span>
+                    <h2 className="text-2xl font-black text-green-400 mt-2">R$ {estatisticas.faturamentoTotal.toFixed(2)}</h2>
+                  </div>
+                  <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl">
+                    <span className="text-xs uppercase font-bold text-gray-400">Total de O.S.</span>
+                    <h2 className="text-2xl font-black text-yellow-500 mt-2">{estatisticas.totalOrdens}</h2>
+                  </div>
+                  <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl">
+                    <span className="text-xs uppercase font-bold text-gray-400">Clientes Cadastrados</span>
+                    <h2 className="text-2xl font-black text-blue-400 mt-2">{estatisticas.clientesCount}</h2>
+                  </div>
+                  <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl">
+                    <span className="text-xs uppercase font-bold text-gray-400">Peças Lançadas</span>
+                    <h2 className="text-2xl font-black text-purple-400 mt-2">{estatisticas.pecasCount}</h2>
+                  </div>
                 </div>
-
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-md">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Faturamento do Dia</p>
-                  <p className="text-3xl font-black text-yellow-500 mt-2">R$ 3.450</p>
-                  <span className="text-xs text-gray-500 mt-2 inline-block">Meta diária: R$ 3.000</span>
-                </div>
-
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-md">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Peças em Estoque Baixo</p>
-                  <p className="text-3xl font-black text-red-400 mt-2">3</p>
-                  <span className="text-xs text-red-500 mt-2 inline-block">⚠️ Requer reposição</span>
-                </div>
-
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-md">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Funcionários Ativos</p>
-                  <p className="text-3xl font-black text-white mt-2">5</p>
-                  <span className="text-xs text-green-400 mt-2 inline-block">🟢 Todos presentes</span>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
-          {abaAtiva === 'financeiro' && <AdminFinanceiro />}
-          {abaAtiva === 'financeiro-master' && <AdminFinanceiroMaster />}
-          {abaAtiva === 'boletos-pecas' && <PainelBoletosPecas />}
-          {abaAtiva === 'clientes-carros' && <PainelClientesCarros />}
-          {abaAtiva === 'contador' && <RelatorioContadorCartao />}
-
-          {abaAtiva === 'equipe' && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-lg">
-              <h3 className="text-lg font-bold text-white mb-4">Gestão de Equipe e Permissões</h3>
-              <p className="text-sm text-gray-400">Módulo de controle de acessos dos mecânicos em desenvolvimento.</p>
-            </div>
+          {abaAtiva === 'master' && (
+            <AdminFinanceiroMaster emailUsuario={emailUsuario} onLogout={onLogout} />
           )}
-
-          {abaAtiva === 'configuracoes' && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-lg">
-              <h3 className="text-lg font-bold text-white mb-4">Configurações Avançadas</h3>
-              <p className="text-sm text-gray-400">Parâmetros do sistema e backups em nuvem.</p>
-            </div>
-          )}
-
         </div>
       </main>
 
