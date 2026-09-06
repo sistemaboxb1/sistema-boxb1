@@ -15,11 +15,12 @@ interface FuncionarioDashboardProps {
 export default function FuncionarioDashboard({ emailUsuario, onLogout }: FuncionarioDashboardProps) {
   const [abaAtiva, setAbaAtiva] = useState<'comanda' | 'clientes' | 'lista-clientes' | 'pagamentos' | 'boletos' | 'pecas-lucro'>('comanda');
 
-  // Estados para o cadastro de pagamentos integrados
+  // Estados para o cadastro de pagamentos integrados com suporte a data personalizada (Mês/Dia)
   const [osVinculada, setOsVinculada] = useState<string>('');
   const [nomeClientePagto, setNomeClientePagto] = useState<string>('');
   const [metodoPagamento, setMetodoPagamento] = useState<string>('pix');
   const [valorPagamento, setValorPagamento] = useState<string>('');
+  const [dataPagamentoPersonalizada, setDataPagamentoPersonalizada] = useState<string>(new Date().toISOString().slice(0, 10));
   const [mensagemPagto, setMensagemPagto] = useState<string>('');
 
   // Estados para cadastro de peça com cálculo automático de porcentagem
@@ -37,13 +38,17 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
   const registrarPagamentoIntegrado = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Converte a data escolhida para timestamp com fuso ou UTC para sincronizar perfeitamente no filtro mensal do Admin
+      const dataIso = new Date(dataPagamentoPersonalizada + 'T12:00:00').toISOString();
+
       const { error } = await supabase.from('ordens_servico').update({
         forma_pagamento: metodoPagamento,
-        status_pagamento: 'pago'
+        status_pagamento: 'pago',
+        criado_em: dataIso // Atualiza a data para vincular diretamente à pasta do mês escolhido no Admin
       }).eq('os_codigo', osVinculada.trim());
 
       if (error) throw error;
-      setMensagemPagto('Pagamento registrado e integrado à O.S. e ao painel do Admin com sucesso!');
+      setMensagemPagto('Pagamento registrado, data vinculada e integrado ao painel do Admin com sucesso!');
       setOsVinculada('');
       setNomeClientePagto('');
       setValorPagamento('');
@@ -60,7 +65,7 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
     }
 
     try {
-      // Salva na tabela isolada pecas_cadastradas (sincronizada com o painel do Admin Izaias)
+      // Salva na tabela pecas_cadastradas sincronizada com o painel do Admin Izaias
       const { error } = await supabase.from('pecas_cadastradas').insert([{
         nome_peca: nomePeca.trim(),
         preco_custo: custoNum,
@@ -182,7 +187,7 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-xl space-y-6">
               <div>
                 <h3 className="text-xl font-black text-white">Registrar Pagamento de O.S.</h3>
-                <p className="text-xs text-gray-400 mt-1">Informe a O.S., o método de pagamento e salve integrado ao banco de dados.</p>
+                <p className="text-xs text-gray-400 mt-1">Informe a O.S., a data de referência (mês e dia) e o método de pagamento integrado.</p>
               </div>
 
               {mensagemPagto && (
@@ -214,6 +219,17 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
                     />
                   </div>
                   <div>
+                    <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Data do Pagamento (Mês e Dia)</label>
+                    <input 
+                      type="date" 
+                      value={dataPagamentoPersonalizada} 
+                      onChange={(e) => setDataPagamentoPersonalizada(e.target.value)} 
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                      required 
+                    />
+                    <span className="text-[10px] text-gray-500 mt-1 block">Vincula diretamente o valor à pasta mensal correspondente no painel do Admin.</span>
+                  </div>
+                  <div>
                     <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Método de Pagamento</label>
                     <select 
                       value={metodoPagamento} 
@@ -227,7 +243,7 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
                       <option value="boleto">Boleto</option>
                     </select>
                   </div>
-                  <div>
+                  <div className="md:col-span-2">
                     <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Valor Recebido (R$)</label>
                     <input 
                       type="number" 
@@ -240,7 +256,7 @@ export default function FuncionarioDashboard({ emailUsuario, onLogout }: Funcion
                   </div>
                 </div>
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3 rounded-lg cursor-pointer">
-                  Salvar Pagamento na O.S. e Banco de Clientes
+                  Salvar Pagamento na O.S. e Vincular ao Mês do Admin
                 </button>
               </form>
             </div>
