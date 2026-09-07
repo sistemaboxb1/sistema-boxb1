@@ -87,13 +87,21 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
       if (bolData) setListaBoletos(bolData);
       if (despData) setListaDespesas(despData);
 
-      // Mapeia todos os meses que possuem algum registro para popular o <select>
+      // Mapeia todos os meses que possuem algum registro (baseado nos primeiros 7 caracteres YYYY-MM) para popular o <select>
       const todosMeses = new Set<string>();
       todosMeses.add(getMesAtualYYYYMM()); // Garante o mês atual na lista
-      osData?.forEach(item => item.criado_em && todosMeses.add(item.criado_em.slice(0, 7)));
-      pecasData?.forEach(item => item.criado_em && todosMeses.add(item.criado_em.slice(0, 7)));
-      bolData?.forEach(item => item.data_vencimento && todosMeses.add(item.data_vencimento.slice(0, 7)));
-      despData?.forEach(item => item.data_vencimento && todosMeses.add(item.data_vencimento.slice(0, 7)));
+      osData?.forEach(item => {
+        if (item.criado_em) todosMeses.add(String(item.criado_em).slice(0, 7));
+      });
+      pecasData?.forEach(item => {
+        if (item.criado_em) todosMeses.add(String(item.criado_em).slice(0, 7));
+      });
+      bolData?.forEach(item => {
+        if (item.data_vencimento) todosMeses.add(String(item.data_vencimento).slice(0, 7));
+      });
+      despData?.forEach(item => {
+        if (item.data_vencimento) todosMeses.add(String(item.data_vencimento).slice(0, 7));
+      });
 
       setMesesDisponiveis(Array.from(todosMeses).sort().reverse());
     } catch (err) {
@@ -104,12 +112,27 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
   };
 
   // --------------------------------------------------------
-  // FILTRAGEM MENSAL PARA RELATÓRIOS
+  // FILTRAGEM MENSAL PARA RELATÓRIOS (USANDO .startsWith PARA EVITAR FUSO HORÁRIO)
   // --------------------------------------------------------
-  const ordensDoMes = listaOrdens.filter(os => os.criado_em?.startsWith(mesSelecionado));
-  const pecasDoMes = listaPecas.filter(p => p.criado_em?.startsWith(mesSelecionado));
-  const boletosDoMes = listaBoletos.filter(b => b.data_vencimento?.startsWith(mesSelecionado));
-  const despesasDoMes = listaDespesas.filter(d => d.data_vencimento?.startsWith(mesSelecionado));
+  const ordensDoMes = listaOrdens.filter(os => {
+    if (!os.criado_em) return false;
+    return String(os.criado_em).startsWith(mesSelecionado);
+  });
+
+  const pecasDoMes = listaPecas.filter(p => {
+    if (!p.criado_em) return false;
+    return String(p.criado_em).startsWith(mesSelecionado);
+  });
+
+  const boletosDoMes = listaBoletos.filter(b => {
+    if (!b.data_vencimento) return false;
+    return String(b.data_vencimento).startsWith(mesSelecionado);
+  });
+
+  const despesasDoMes = listaDespesas.filter(d => {
+    if (!d.data_vencimento) return false;
+    return String(d.data_vencimento).startsWith(mesSelecionado);
+  });
 
   // Cálculos Consolidados do Mês Selecionado
   const faturamentoTotalMes = ordensDoMes.reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
@@ -149,7 +172,8 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
   const balancoSemanal = [0, 0, 0, 0];
   ordensDoMes.forEach(os => {
     if (os.criado_em) {
-      const dia = parseInt(os.criado_em.split('T')[0].split('-')[2]);
+      const diaStr = String(os.criado_em).split('T')[0].split('-')[2];
+      const dia = parseInt(diaStr) || 1;
       if (dia <= 7) balancoSemanal[0] += Number(os.valor_total);
       else if (dia <= 14) balancoSemanal[1] += Number(os.valor_total);
       else if (dia <= 21) balancoSemanal[2] += Number(os.valor_total);
