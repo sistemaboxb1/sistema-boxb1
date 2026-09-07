@@ -27,6 +27,7 @@ interface OrdemServicoHistorico {
 }
 
 export default function ComandaDigitalOS() {
+  const [modoAba, setModoAba] = useState<'comanda' | 'pagamento_avulso'>('comanda');
   const [modoVisualizacao, setModoVisualizacao] = useState<'interno' | 'cliente'>('interno');
 
   // Identificador interno se estamos editando uma O.S. existente
@@ -46,6 +47,12 @@ export default function ComandaDigitalOS() {
   const [formaPagamento, setFormaPagamento] = useState<string>('pix');
   const [parcelas, setParcelas] = useState<number>(1);
   const [taxaJurosMensal, setTaxaJurosMensal] = useState<number>(1.99);
+
+  // Estados para Pagamento Avulso Rápido
+  const [avulsoClienteNome, setAvulsoClienteNome] = useState<string>('');
+  const [avulsoValor, setAvulsoValor] = useState<string>('');
+  const [avulsoFormaPagamento, setAvulsoFormaPagamento] = useState<string>('pix');
+  const [avulsoDescricao, setAvulsoDescricao] = useState<string>('');
 
   const [historicoCliente, setHistoricoCliente] = useState<OrdemServicoHistorico[]>([]);
   const [itensComanda, setItensComanda] = useState<ItemComanda[]>([
@@ -108,7 +115,6 @@ export default function ComandaDigitalOS() {
     setItensComanda(itensComanda.filter(i => i.id !== id));
   };
 
-  // Carregar O.S. existente para edição
   const carregarOsParaEdicao = (os: OrdemServicoHistorico) => {
     setOsEditandoId(os.id);
     setOsCodigo(os.os_codigo);
@@ -116,6 +122,19 @@ export default function ComandaDigitalOS() {
     setStatusPagamento(os.status_pagamento || 'pendente');
     setMensagem(`Modo de edição ativo para a O.S. ${os.os_codigo}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Função para Excluir O.S. diretamente no histórico do funcionário
+  const excluirOsFuncionario = async (id: string, codigo: string) => {
+    if (!confirm(`Deseja realmente excluir a O.S. ${codigo}?`)) return;
+    try {
+      const { error } = await supabase.from('ordens_servico').delete().eq('id', id);
+      if (error) throw error;
+      setMensagem(`O.S. ${codigo} excluída com sucesso!`);
+      carregarDadosIniciais();
+    } catch (err: any) {
+      alert('Erro ao excluir O.S.: ' + err.message);
+    }
   };
 
   const salvarOuAtualizarOrdemServico = async () => {
@@ -151,7 +170,6 @@ export default function ComandaDigitalOS() {
       }
 
       if (osEditandoId) {
-        // Atualiza O.S. existente
         const { error: errUpdate } = await supabase
           .from('ordens_servico')
           .update({
@@ -165,7 +183,6 @@ export default function ComandaDigitalOS() {
         if (errUpdate) throw errUpdate;
         setMensagem('Ordem de serviço atualizada com sucesso!');
       } else {
-        // Insere nova O.S.
         const { error: errInsert } = await supabase.from('ordens_servico').insert([{
           os_codigo: osCodigo,
           cliente_id: clienteIdFinal,
@@ -188,22 +205,67 @@ export default function ComandaDigitalOS() {
     }
   };
 
+  // Função para Registrar Pagamento Avulso Direto no Caixa do Admin
+  const registrarPagamentoAvulso = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!avulsoValor || parseFloat(avulsoValor) <= 0) {
+      alert('Informe um valor válido para o pagamento.');
+      return;
+    }
+
+    setSalvando(true);
+    setMensagem('');
+
+    try {
+      const codigoAvulso = `PG-${Date.now().toString().slice(-6)}`;
+      const { error } = await supabase.from('ordens_servico').insert([{
+        os_codigo: codigoAvulso,
+        cliente_nome: avulsoClienteNome.trim() || 'Cliente Avulso',
+        problema_relatado: avulsoDescricao.trim() || 'Pagamento Avulso Registrado no Caixa',
+        status_pagamento: 'pago', // Já entra como pago para cair direto no faturamento do admin
+        forma_pagamento: avulsoFormaPagamento,
+        valor_total: parseFloat(avulsoValor) || 0,
+        criado_em: new Date().toISOString()
+      }]);
+
+      if (error) throw error;
+
+      setMensagem('Pagamento avulso registrado e integrado com sucesso ao caixa do Admin!');
+      setAvulsoClienteNome('');
+      setAvulsoValor('');
+      setAvulsoDescricao('');
+      carregarDadosIniciais();
+    } catch (err: any) {
+      setMensagem('Erro ao registrar pagamento avulso: ' + err.message);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       
-      <div className="bg-gray-900 border border-gray-800 p-4 rounded-xl flex justify-between items-center shadow-lg print:hidden">
-        <div>
-          <span className="text-xs font-bold text-yellow-500 uppercase tracking-widest">Gerenciamento de O.S. & Recibo</span>
-          <h3 className="text-lg font-black text-white">{osCodigo} {osEditandoId ? '(Editando)' : ''}</h3>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button onClick={() => setModoVisualizacao('interno')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${modoVisualizacao === 'interno' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
-            🔧 Visão Oficina
+      {/* Abas Superiores de Escolha: Comanda O.S. ou Pagamento Avulso */}
+      <div className="bg-gray-900 border border-gray-800 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center shadow-lg gap-4 print:hidden">
+        <div className="flex space-x-2">
+          <button onClick={() => setModoAba('comanda')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${modoAba === 'comanda' ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
+            📋 Comanda / O.S. Completa
           </button>
-          <button onClick={() => setModoVisualizacao('cliente')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${modoVisualizacao === 'cliente' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
-            ✨ Layout Exclusivo Cliente
+          <button onClick={() => setModoAba('pagamento_avulso')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${modoAba === 'pagamento_avulso' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
+            💵 Registrar Pagamento Avulso (Direto no Caixa)
           </button>
         </div>
+
+        {modoAba === 'comanda' && (
+          <div className="flex items-center space-x-2">
+            <button onClick={() => setModoVisualizacao('interno')} className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${modoVisualizacao === 'interno' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
+              🔧 Oficina
+            </button>
+            <button onClick={() => setModoVisualizacao('cliente')} className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${modoVisualizacao === 'cliente' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
+              ✨ Recibo Cliente
+            </button>
+          </div>
+        )}
       </div>
 
       {mensagem && (
@@ -212,7 +274,82 @@ export default function ComandaDigitalOS() {
         </div>
       )}
 
-      {modoVisualizacao === 'interno' && (
+      {/* MODALIDADE 1: REGISTRO DE PAGAMENTO AVULSO DIRETO NO CAIXA */}
+      {modoAba === 'pagamento_avulso' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl space-y-6">
+          <div>
+            <h3 className="text-xl font-black text-white">Registro Rápido de Pagamento Avulso</h3>
+            <p className="text-xs text-gray-400 mt-1">
+              Use este painel para registrar qualquer valor recebido por fora que precise cair instantaneamente no caixa e faturamento do Admin.
+            </p>
+          </div>
+
+          <form onSubmit={registrarPagamentoAvulso} className="space-y-4 bg-gray-950 p-6 rounded-xl border border-gray-800">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Nome do Cliente (Opcional)</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: João da Silva" 
+                  value={avulsoClienteNome} 
+                  onChange={(e) => setAvulsoClienteNome(e.target.value)} 
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Valor Recebido (R$)</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="0.00" 
+                  value={avulsoValor} 
+                  onChange={(e) => setAvulsoValor(e.target.value)} 
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                  required 
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Forma de Pagamento</label>
+                <select 
+                  value={avulsoFormaPagamento} 
+                  onChange={(e) => setAvulsoFormaPagamento(e.target.value)} 
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
+                >
+                  <option value="pix">PIX</option>
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="cartao_avista">Cartão à Vista</option>
+                  <option value="cartao_parcelado">Cartão Parcelado</option>
+                  <option value="boleto">Boleto</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold uppercase text-gray-400 mb-1">Descrição / Motivo</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Adiantamento de serviço / Venda rápida de balcão" 
+                  value={avulsoDescricao} 
+                  onChange={(e) => setAvulsoDescricao(e.target.value)} 
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" 
+                />
+              </div>
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={salvando} 
+              className="w-full bg-green-600 hover:bg-green-500 text-white font-bold text-xs py-3.5 rounded-lg cursor-pointer shadow-lg mt-4"
+            >
+              {salvando ? 'Registrando no Caixa...' : 'Salvar e Enviar para o Caixa do Admin'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* MODALIDADE 2: COMANDA / O.S. COMPLETA */}
+      {modoAba === 'comanda' && modoVisualizacao === 'interno' && (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl space-y-8">
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-950 p-6 rounded-xl border border-gray-800">
@@ -321,9 +458,9 @@ export default function ComandaDigitalOS() {
             {salvando ? 'Salvando...' : osEditandoId ? 'Atualizar Ordem de Serviço' : 'Salvar Nova Ordem de Serviço'}
           </button>
 
-          {/* Histórico para seleção e alteração posterior */}
+          {/* Histórico com Opção de Editar e Excluir O.S. diretamente */}
           <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-white">Histórico de O.S. (Clique em Editar para alterar)</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-white">Histórico de O.S. (Gerenciamento de Funcionário)</h4>
             <div className="space-y-2">
               {historicoCliente.map((os) => (
                 <div key={os.id} className="bg-gray-900 p-4 rounded-lg flex justify-between items-center text-xs border border-gray-800">
@@ -331,15 +468,18 @@ export default function ComandaDigitalOS() {
                     <span className="font-bold text-yellow-500">{os.os_codigo}</span>
                     <p className="text-gray-400 mt-0.5">{os.problema_relatado}</p>
                   </div>
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-3">
                     <div className="text-right">
                       <span className="font-black text-white block">R$ {Number(os.valor_total).toFixed(2)}</span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${os.status_pagamento === 'pago' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
-                        {os.status_pagamento.toUpperCase()}
+                        {os.status_pagamento?.toUpperCase()}
                       </span>
                     </div>
-                    <button onClick={() => carregarOsParaEdicao(os)} className="bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded text-gray-200 font-bold">
+                    <button onClick={() => carregarOsParaEdicao(os)} className="bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded text-gray-200 font-bold cursor-pointer">
                       Editar
+                    </button>
+                    <button onClick={() => excluirOsFuncionario(os.id, os.os_codigo)} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-700/50 px-2.5 py-1.5 rounded text-[11px] font-bold cursor-pointer">
+                      Excluir
                     </button>
                   </div>
                 </div>
@@ -350,8 +490,8 @@ export default function ComandaDigitalOS() {
         </div>
       )}
 
-      {/* ================= LAYOUT EXCLUSIVO PRO CLIENTE (COM NOME E CARRO) ================= */}
-      {modoVisualizacao === 'cliente' && (
+      {/* ================= LAYOUT EXCLUSIVO PRO CLIENTE ================= */}
+      {modoAba === 'comanda' && modoVisualizacao === 'cliente' && (
         <div className="bg-white text-gray-900 border border-gray-300 rounded-2xl p-8 shadow-2xl space-y-8 max-w-2xl mx-auto">
           <div className="text-center border-b border-gray-200 pb-6">
             <h1 className="text-3xl font-black tracking-wider text-gray-900">
@@ -365,7 +505,7 @@ export default function ComandaDigitalOS() {
           <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl text-xs">
             <div>
               <span className="block text-gray-400 uppercase font-semibold text-[10px]">Cliente:</span>
-              <strong className="text-gray-800 text-sm">{clienteomeFinalText(clienteNome)}</strong>
+              <strong className="text-gray-800 text-sm">{clienteNome.trim() !== '' ? clienteNome : 'Cliente Balcão'}</strong>
             </div>
             <div>
               <span className="block text-gray-400 uppercase font-semibold text-[10px]">Veículo:</span>
@@ -411,7 +551,7 @@ export default function ComandaDigitalOS() {
           </div>
 
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-[11px] text-gray-600 leading-relaxed text-center font-medium">
-            ⚠️ <strong>Aviso Legal:</strong> Este demonstrativo serve como recibo oficial e consubstancia obrigação líquida, certa e exigível, podendo ser levada a protesto e executada judicialmente em caso de inadimplemento.
+            ⚠️ <strong>Aviso Legal:</strong> Este demonstrativo serve como recibo oficial e consubstancia obrigação líquida, certa e exigível.
           </div>
 
           <div className="text-center pt-4 print:hidden">
@@ -424,9 +564,4 @@ export default function ComandaDigitalOS() {
 
     </div>
   );
-}
-
-// Função auxiliar interna para garantir exibição do nome do cliente
-function clienteomeFinalText(nome: string) {
-  return nome.trim() !== '' ? nome : 'Cliente Balcão';
 }
