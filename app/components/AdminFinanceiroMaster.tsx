@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import ComandaDigitalOS from './ComandaDigitalOS';
 import GeradorOrcamentoWhatsApp from './GeradorOrcamentoWhatsApp';
+import PainelGestaoClientes from './PainelGestaoClientes';
 
 interface AdminFinanceiroMasterProps {
   emailUsuario: string;
@@ -115,7 +116,22 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
   const totalDespesasMes = despesasDoMes.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
   const totalBoletosPecasMes = boletosDoMes.reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
 
-  // Cartão / Contador (Detalhado mensal)
+  // Totais Agrupados por Método de Pagamento (Ex: Pix, Cartão, Dinheiro)
+  const totaisPorMetodo: { [key: string]: number } = {};
+  ordensDoMes.forEach(os => {
+    const metodoBruto = (os.forma_pagamento || 'outros').toLowerCase();
+    let chaveMetodo = 'Outros';
+    if (metodoBruto.includes('pix')) chaveMetodo = 'PIX';
+    else if (metodoBruto.includes('cartao') || metodoBruto.includes('credito') || metodoBruto.includes('debito')) chaveMetodo = 'Cartão';
+    else if (metodoBruto.includes('dinheiro')) chaveMetodo = 'Dinheiro';
+    else if (metodoBruto.includes('boleto')) chaveMetodo = 'Boleto';
+    else chaveMetodo = os.forma_pagamento.toUpperCase();
+
+    const valor = Number(os.valor_total) || 0;
+    totaisPorMetodo[chaveMetodo] = (totaisPorMetodo[chaveMetodo] || 0) + valor;
+  });
+
+  // Cartão / Contador (Detalhado mensal) - Abrangendo variações escritas pelos funcionários
   const pagamentosCartaoMes = ordensDoMes.filter(os => 
     os.forma_pagamento && (os.forma_pagamento.toLowerCase().includes('cartao') || os.forma_pagamento.toLowerCase().includes('credito') || os.forma_pagamento.toLowerCase().includes('debito'))
   );
@@ -390,6 +406,23 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                       <h2 className={`text-2xl font-black mt-2 ${lucroLiquidoGeralMes >= 0 ? 'text-blue-400' : 'text-red-400'}`}>R$ {lucroLiquidoGeralMes.toFixed(2)}</h2>
                     </div>
                   </div>
+
+                  {/* BLOCO DE VALORES POR MÉTODO DE PAGAMENTO (SOLICITADO) */}
+                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl space-y-4">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-yellow-500">Valores Recebidos por Método de Pagamento ({formatarMesAno(mesSelecionado)})</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {Object.keys(totaisPorMetodo).length > 0 ? (
+                        Object.entries(totaisPorMetodo).map(([metodo, valor]) => (
+                          <div key={metodo} className="bg-gray-950 p-4 rounded-xl border border-gray-800">
+                            <span className="text-[11px] uppercase font-bold text-gray-400 block">{metodo}</span>
+                            <strong className="text-green-400 text-lg block mt-1">R$ {valor.toFixed(2)}</strong>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-gray-500 col-span-4 py-2">Nenhum pagamento registrado neste mês.</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -611,7 +644,7 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                 </div>
               )}
 
-              {/* ABA 8 FOI INTEGRADA NA ABA DE LUCROS. PARA NÃO DEIXAR VAZIA E MANTER A ESTRUTURA, RENDERIZAMOS APENAS INFORMAÇÃO OU MANTEMOS COMO LEGACY */}
+              {/* ABA 8 PEÇAS (LEGACY) */}
               {abaAtiva === 'pecas' && (
                 <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 md:p-8 shadow-xl text-center">
                   <h3 className="text-lg font-black text-white">Visualização de Peças</h3>
@@ -620,48 +653,8 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                 </div>
               )}
 
-              {/* 9. GESTÃO DE CLIENTES COM CADASTRO/EXCLUSÃO ADMIN */}
-              {abaAtiva === 'clientes' && (
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
-                  <div>
-                    <h3 className="text-lg md:text-xl font-black text-white">Base Global de Clientes</h3>
-                    <p className="text-xs text-gray-400 mt-1">Gerencie, adicione e pesquise clientes. (A lista de clientes não reseta com o mês).</p>
-                  </div>
-
-                  <div className="bg-gray-950 p-4 rounded-xl border border-gray-800">
-                    <h4 className="text-xs font-bold text-yellow-500 mb-3 uppercase">Cadastrar Novo Cliente Rápidamente (Admin)</h4>
-                    <form onSubmit={cadastrarCliente} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <input type="text" value={novoCliNome} onChange={e => setNovoCliNome(e.target.value)} placeholder="Nome do Cliente" className="bg-gray-900 border border-gray-700 px-3 py-2 rounded-lg text-xs text-white" required/>
-                      <input type="text" value={novoCliTelefone} onChange={e => setNovoCliTelefone(e.target.value)} placeholder="Telefone / WhatsApp" className="bg-gray-900 border border-gray-700 px-3 py-2 rounded-lg text-xs text-white" required/>
-                      <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs px-4 py-2 cursor-pointer">Salvar Cliente</button>
-                    </form>
-                    {msgCliente && <p className="text-xs text-green-400 mt-2">{msgCliente}</p>}
-                  </div>
-
-                  <div>
-                    <input 
-                      type="text" 
-                      value={termoBuscaCliente} 
-                      onChange={(e) => setTermoBuscaCliente(e.target.value)} 
-                      placeholder="🔍 Pesquisar na base inteira (nome ou telefone)..." 
-                      className="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-3 text-xs text-white shadow-inner" 
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {clientesFiltrados.map((cli) => (
-                      <div key={cli.id} className="bg-gray-950 p-4 rounded-xl border border-gray-800 text-xs flex justify-between items-center">
-                        <div>
-                          <h4 className="font-bold text-white text-sm">{cli.nome}</h4>
-                          <p className="text-gray-400">Telefone: {cli.telefone}</p>
-                        </div>
-                        <button onClick={() => excluirCliente(cli.id)} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 px-3 py-1.5 rounded text-[10px] font-bold cursor-pointer transition-colors">🗑️ Excluir</button>
-                      </div>
-                    ))}
-                    {clientesFiltrados.length === 0 && <p className="text-xs text-gray-500 text-center py-6 col-span-2">Nenhum cliente encontrado.</p>}
-                  </div>
-                </div>
-              )}
+              {/* 9. GESTÃO DE CLIENTES & HISTÓRICO DE O.S. (COMPONENTIZADO) */}
+              {abaAtiva === 'clientes' && <PainelGestaoClientes />}
 
               {/* 10. BOLETOS MENSAL */}
               {abaAtiva === 'boletos' && (

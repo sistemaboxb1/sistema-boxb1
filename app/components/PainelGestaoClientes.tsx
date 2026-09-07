@@ -51,15 +51,36 @@ export default function PainelGestaoClientes() {
 
       const listaMapeada = await Promise.all(
         (cliData || []).map(async (cli) => {
-          const { data: osData } = await supabase
+          // 1. Busca O.S. vinculadas diretamente pelo cliente_id
+          const { data: osDireta } = await supabase
             .from('ordens_servico')
             .select('*')
-            .eq('cliente_id', cli.id)
-            .order('criado_em', { ascending: false });
+            .eq('cliente_id', cli.id);
+
+          // 2. Busca veículos do cliente para capturar O.S. vinculadas pelo veiculo_id
+          const { data: veiculosData } = await supabase
+            .from('veiculos')
+            .select('id')
+            .eq('cliente_id', cli.id);
+
+          let osPorVeiculo: any[] = [];
+          if (veiculosData && veiculosData.length > 0) {
+            const veiculoIds = veiculosData.map(v => v.id);
+            const { data: osVeiculoData } = await supabase
+              .from('ordens_servico')
+              .select('*')
+              .in('veiculo_id', veiculoIds);
+            if (osVeiculoData) osPorVeiculo = osVeiculoData;
+          }
+
+          // Combina e remove duplicatas de O.S.
+          const todasOsMap = new Map();
+          [...(osDireta || []), ...osPorVeiculo].forEach(os => todasOsMap.set(os.id, os));
+          const ordensUnicas = Array.from(todasOsMap.values()).sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
 
           return {
             ...cli,
-            ordens_servico: osData || []
+            ordens_servico: ordensUnicas
           };
         })
       );
@@ -216,7 +237,7 @@ export default function PainelGestaoClientes() {
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-yellow-400">{os.os_codigo}</span>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${os.status_pagamento === 'pago' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
-                          {os.status_pagamento.toUpperCase()} ({os.forma_pagamento})
+                          {os.status_pagamento?.toUpperCase()} ({os.forma_pagamento})
                         </span>
                       </div>
 
