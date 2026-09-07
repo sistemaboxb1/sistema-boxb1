@@ -124,7 +124,6 @@ export default function ComandaDigitalOS() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Função para Excluir O.S. diretamente no histórico do funcionário
   const excluirOsFuncionario = async (id: string, codigo: string) => {
     if (!confirm(`Deseja realmente excluir a O.S. ${codigo}?`)) return;
     try {
@@ -205,7 +204,6 @@ export default function ComandaDigitalOS() {
     }
   };
 
-  // Função para Registrar Pagamento Avulso Direto no Caixa do Admin
   const registrarPagamentoAvulso = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!avulsoValor || parseFloat(avulsoValor) <= 0) {
@@ -218,11 +216,13 @@ export default function ComandaDigitalOS() {
 
     try {
       const codigoAvulso = `PG-${Date.now().toString().slice(-6)}`;
+      const nomeFormatado = avulsoClienteNome.trim() ? `Cliente: ${avulsoClienteNome.trim()}` : 'Cliente Avulso';
+      const motivoFormatado = avulsoDescricao.trim() ? ` | Motivo: ${avulsoDescricao.trim()}` : '';
+
       const { error } = await supabase.from('ordens_servico').insert([{
         os_codigo: codigoAvulso,
-        cliente_nome: avulsoClienteNome.trim() || 'Cliente Avulso',
-        problema_relatado: avulsoDescricao.trim() || 'Pagamento Avulso Registrado no Caixa',
-        status_pagamento: 'pago', // Já entra como pago para cair direto no faturamento do admin
+        problema_relatado: `${nomeFormatado}${motivoFormatado} [Pagamento Avulso]`,
+        status_pagamento: 'pago',
         forma_pagamento: avulsoFormaPagamento,
         valor_total: parseFloat(avulsoValor) || 0,
         criado_em: new Date().toISOString()
@@ -245,7 +245,6 @@ export default function ComandaDigitalOS() {
   return (
     <div className="space-y-6">
       
-      {/* Abas Superiores de Escolha: Comanda O.S. ou Pagamento Avulso */}
       <div className="bg-gray-900 border border-gray-800 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center shadow-lg gap-4 print:hidden">
         <div className="flex space-x-2">
           <button onClick={() => setModoAba('comanda')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${modoAba === 'comanda' ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
@@ -274,7 +273,6 @@ export default function ComandaDigitalOS() {
         </div>
       )}
 
-      {/* MODALIDADE 1: REGISTRO DE PAGAMENTO AVULSO DIRETO NO CAIXA */}
       {modoAba === 'pagamento_avulso' && (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl space-y-6">
           <div>
@@ -348,7 +346,6 @@ export default function ComandaDigitalOS() {
         </div>
       )}
 
-      {/* MODALIDADE 2: COMANDA / O.S. COMPLETA */}
       {modoAba === 'comanda' && modoVisualizacao === 'interno' && (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl space-y-8">
           
@@ -458,7 +455,6 @@ export default function ComandaDigitalOS() {
             {salvando ? 'Salvando...' : osEditandoId ? 'Atualizar Ordem de Serviço' : 'Salvar Nova Ordem de Serviço'}
           </button>
 
-          {/* Histórico com Opção de Editar e Excluir O.S. diretamente */}
           <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-white">Histórico de O.S. (Gerenciamento de Funcionário)</h4>
             <div className="space-y-2">
@@ -490,7 +486,6 @@ export default function ComandaDigitalOS() {
         </div>
       )}
 
-      {/* ================= LAYOUT EXCLUSIVO PRO CLIENTE ================= */}
       {modoAba === 'comanda' && modoVisualizacao === 'cliente' && (
         <div className="bg-white text-gray-900 border border-gray-300 rounded-2xl p-8 shadow-2xl space-y-8 max-w-2xl mx-auto">
           <div className="text-center border-b border-gray-200 pb-6">
