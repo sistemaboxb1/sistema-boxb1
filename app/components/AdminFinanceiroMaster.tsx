@@ -20,7 +20,6 @@ interface Despesa {
   status: string;
 }
 
-// Helpers para gestão mensal
 const getMesAtualYYYYMM = () => new Date().toISOString().slice(0, 7);
 const formatarMesAno = (yyyyMm: string) => {
   if (!yyyyMm) return '';
@@ -37,24 +36,20 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
   const [carregando, setCarregando] = useState<boolean>(true);
   const [menuMobileAberto, setMenuMobileAberto] = useState<boolean>(false);
 
-  // Filtro Global de Mês
   const [mesSelecionado, setMesSelecionado] = useState<string>(getMesAtualYYYYMM());
   const [mesesDisponiveis, setMesesDisponiveis] = useState<string[]>([]);
 
-  // Estados dos dados globais
   const [listaOrdens, setListaOrdens] = useState<any[]>([]);
   const [listaPecas, setListaPecas] = useState<any[]>([]);
   const [listaClientes, setListaClientes] = useState<any[]>([]);
   const [listaBoletos, setListaBoletos] = useState<any[]>([]);
   const [listaDespesas, setListaDespesas] = useState<any[]>([]);
 
-  // Clientes: Pesquisa e Cadastro (CRUD)
   const [termoBuscaCliente, setTermoBuscaCliente] = useState<string>('');
   const [novoCliNome, setNovoCliNome] = useState<string>('');
   const [novoCliTelefone, setNovoCliTelefone] = useState<string>('');
   const [msgCliente, setMsgCliente] = useState<string>('');
 
-  // Estados de Despesas (CRUD)
   const [editandoDespesaId, setEditandoDespesaId] = useState<string | null>(null);
   const [descDespesa, setDescDespesa] = useState<string>('');
   const [catDespesa, setCatDespesa] = useState<string>('luz_energia');
@@ -62,7 +57,6 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
   const [dataDespesa, setDataDespesa] = useState<string>('');
   const [mensagemDespesa, setMensagemDespesa] = useState<string>('');
 
-  // Estados de Peças (Edição)
   const [editandoPecaId, setEditandoPecaId] = useState<string | null>(null);
   const [editPecaNome, setEditPecaNome] = useState<string>('');
   const [editPecaCusto, setEditPecaCusto] = useState<string>('');
@@ -87,21 +81,12 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
       if (bolData) setListaBoletos(bolData);
       if (despData) setListaDespesas(despData);
 
-      // Mapeia todos os meses que possuem algum registro (baseado nos primeiros 7 caracteres YYYY-MM) para popular o <select>
       const todosMeses = new Set<string>();
-      todosMeses.add(getMesAtualYYYYMM()); // Garante o mês atual na lista
-      osData?.forEach(item => {
-        if (item.criado_em) todosMeses.add(String(item.criado_em).slice(0, 7));
-      });
-      pecasData?.forEach(item => {
-        if (item.criado_em) todosMeses.add(String(item.criado_em).slice(0, 7));
-      });
-      bolData?.forEach(item => {
-        if (item.data_vencimento) todosMeses.add(String(item.data_vencimento).slice(0, 7));
-      });
-      despData?.forEach(item => {
-        if (item.data_vencimento) todosMeses.add(String(item.data_vencimento).slice(0, 7));
-      });
+      todosMeses.add(getMesAtualYYYYMM());
+      osData?.forEach(item => { if (item.criado_em) todosMeses.add(String(item.criado_em).slice(0, 7)); });
+      pecasData?.forEach(item => { if (item.criado_em) todosMeses.add(String(item.criado_em).slice(0, 7)); });
+      bolData?.forEach(item => { if (item.data_vencimento) todosMeses.add(String(item.data_vencimento).slice(0, 7)); });
+      despData?.forEach(item => { if (item.data_vencimento) todosMeses.add(String(item.data_vencimento).slice(0, 7)); });
 
       setMesesDisponiveis(Array.from(todosMeses).sort().reverse());
     } catch (err) {
@@ -111,9 +96,6 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
     }
   };
 
-  // --------------------------------------------------------
-  // FILTRAGEM MENSAL PARA RELATÓRIOS (USANDO .startsWith PARA EVITAR FUSO HORÁRIO)
-  // --------------------------------------------------------
   const ordensDoMes = listaOrdens.filter(os => {
     if (!os.criado_em) return false;
     return String(os.criado_em).startsWith(mesSelecionado);
@@ -134,14 +116,18 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
     return String(d.data_vencimento).startsWith(mesSelecionado);
   });
 
-  // Cálculos Consolidados do Mês Selecionado
-  const faturamentoTotalMes = ordensDoMes.reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
+  // Separação oficial: Apenas O.S. pagas entram no Faturamento Real do Caixa
+  const ordensPagasMes = ordensDoMes.filter(os => (os.status_pagamento || '').toLowerCase() === 'pago');
+  const ordensPendentesMes = ordensDoMes.filter(os => (os.status_pagamento || '').toLowerCase() !== 'pago');
+
+  const faturamentoTotalMes = ordensPagasMes.reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
+  const totalPendenteMes = ordensPendentesMes.reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
+  
   const totalDespesasMes = despesasDoMes.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
   const totalBoletosPecasMes = boletosDoMes.reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
 
-  // Totais Agrupados por Método de Pagamento (Ex: Pix, Cartão, Dinheiro)
   const totaisPorMetodo: { [key: string]: number } = {};
-  ordensDoMes.forEach(os => {
+  ordensPagasMes.forEach(os => {
     const metodoBruto = (os.forma_pagamento || 'outros').toLowerCase();
     let chaveMetodo = 'Outros';
     if (metodoBruto.includes('pix')) chaveMetodo = 'PIX';
@@ -154,23 +140,19 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
     totaisPorMetodo[chaveMetodo] = (totaisPorMetodo[chaveMetodo] || 0) + valor;
   });
 
-  // Cartão / Contador (Detalhado mensal) - Abrangendo variações escritas pelos funcionários
-  const pagamentosCartaoMes = ordensDoMes.filter(os => 
+  const pagamentosCartaoMes = ordensPagasMes.filter(os => 
     os.forma_pagamento && (os.forma_pagamento.toLowerCase().includes('cartao') || os.forma_pagamento.toLowerCase().includes('credito') || os.forma_pagamento.toLowerCase().includes('debito'))
   );
   const totalCartaoMes = pagamentosCartaoMes.reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
 
-  // Peças Mensal
   const custoTotalPecasMes = pecasDoMes.reduce((acc, curr) => acc + (Number(curr.preco_custo) || 0), 0);
   const vendaTotalPecasMes = pecasDoMes.reduce((acc, curr) => acc + (Number(curr.preco_venda) || 0), 0);
   const lucroTotalPecasMes = pecasDoMes.reduce((acc, curr) => acc + (Number(curr.lucro_unitario) || 0), 0);
 
-  // Lucro Líquido Integrado Mensal (Faturamento O.S. + Lucro Peças - Despesas - Boletos)
   const lucroLiquidoGeralMes = faturamentoTotalMes + lucroTotalPecasMes - totalDespesasMes - totalBoletosPecasMes;
 
-  // Separação Semanal (Dias 1-7, 8-14, 15-21, 22+)
   const balancoSemanal = [0, 0, 0, 0];
-  ordensDoMes.forEach(os => {
+  ordensPagasMes.forEach(os => {
     if (os.criado_em) {
       const diaStr = String(os.criado_em).split('T')[0].split('-')[2];
       const dia = parseInt(diaStr) || 1;
@@ -181,48 +163,18 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
     }
   });
 
-  const clientesFiltrados = listaClientes.filter(cli => 
-    cli.nome.toLowerCase().includes(termoBuscaCliente.toLowerCase()) || 
-    (cli.telefone && cli.telefone.includes(termoBuscaCliente))
-  );
-
-  // --------------------------------------------------------
-  // FUNÇÕES CRUD (CRIAR, ATUALIZAR, DELETAR)
-  // --------------------------------------------------------
-
-  // Clientes
-  const cadastrarCliente = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!novoCliNome.trim() || !novoCliTelefone.trim()) return;
-    try {
-      await supabase.from('clientes').insert([{ nome: novoCliNome.trim(), telefone: novoCliTelefone.trim() }]);
-      setMsgCliente('Cliente cadastrado com sucesso!');
-      setNovoCliNome(''); setNovoCliTelefone('');
-      carregarDadosAdmin();
-    } catch (err: any) { setMsgCliente('Erro: ' + err.message); }
-  };
-
-  const excluirCliente = async (id: string) => {
-    if (!confirm('Deseja realmente excluir este cliente e todo o seu histórico?')) return;
-    await supabase.from('clientes').delete().eq('id', id);
-    carregarDadosAdmin();
-  };
-
-  // Ordem de Serviço
   const excluirOs = async (id: string) => {
     if (!confirm('Excluir esta Ordem de Serviço permanentemente?')) return;
     await supabase.from('ordens_servico').delete().eq('id', id);
     carregarDadosAdmin();
   };
 
-  // Boletos
   const excluirBoleto = async (id: string) => {
     if (!confirm('Excluir este boleto de peças?')) return;
     await supabase.from('boletos_pecas').delete().eq('id', id);
     carregarDadosAdmin();
   };
 
-  // Peças (Editar e Excluir)
   const salvarEdicaoPeca = async (id: string) => {
     const custo = parseFloat(editPecaCusto) || 0;
     const venda = parseFloat(editPecaVenda) || 0;
@@ -239,7 +191,6 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
     carregarDadosAdmin();
   };
 
-  // Despesas
   const salvarDespesa = async (e: React.FormEvent) => {
     e.preventDefault();
     setMensagemDespesa('');
@@ -282,8 +233,6 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-gray-950 text-white">
-      
-      {/* Botão de Menu Mobile para Celular */}
       <div className="md:hidden bg-gray-900 border-b border-gray-800 p-4 flex justify-between items-center sticky top-0 z-50">
         <div>
           <h1 className="text-lg font-black tracking-wider text-white">
@@ -299,7 +248,6 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
         </button>
       </div>
 
-      {/* Barra Lateral (Desktop & Mobile Dropdown) */}
       <aside className={`w-full md:w-64 bg-gray-900 border-r border-gray-800 flex flex-col justify-between shadow-xl ${menuMobileAberto ? 'block' : 'hidden md:flex'}`}>
         <div>
           <div className="p-6 border-b border-gray-800 hidden md:block">
@@ -315,39 +263,30 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
             <button onClick={() => mudarAba('visao-geral')} className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-2 cursor-pointer ${abaAtiva === 'visao-geral' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>📊 Visão Geral & Caixa</span>
             </button>
-
             <button onClick={() => mudarAba('orcamento-zap')} className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-2 cursor-pointer ${abaAtiva === 'orcamento-zap' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>📱 Orçamento Rápido (WhatsApp)</span>
             </button>
-
             <button onClick={() => mudarAba('contador-cartao')} className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-2 cursor-pointer ${abaAtiva === 'contador-cartao' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>📑 Relatório Cartão (Contador)</span>
             </button>
-
             <button onClick={() => mudarAba('lucro-pecas')} className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-2 cursor-pointer ${abaAtiva === 'lucro-pecas' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>📦 Lucro & Custos de Peças</span>
             </button>
-
             <button onClick={() => mudarAba('lucro-total')} className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-2 cursor-pointer ${abaAtiva === 'lucro-total' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>💰 Lucro Líquido & Balanço Total</span>
             </button>
-
             <button onClick={() => mudarAba('comanda')} className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-2 cursor-pointer ${abaAtiva === 'comanda' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>📋 Comanda Digital (Admin)</span>
             </button>
-
             <button onClick={() => mudarAba('despesas')} className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-2 cursor-pointer ${abaAtiva === 'despesas' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>💸 Gastos & Despesas (Editar/Excluir)</span>
             </button>
-
             <button onClick={() => mudarAba('pecas')} className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-2 cursor-pointer ${abaAtiva === 'pecas' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>🛠️ Peças Cadastradas</span>
             </button>
-
             <button onClick={() => mudarAba('clientes')} className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-2 cursor-pointer ${abaAtiva === 'clientes' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>👥 Clientes & Pesquisa</span>
             </button>
-
             <button onClick={() => mudarAba('boletos')} className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-2 cursor-pointer ${abaAtiva === 'boletos' ? 'bg-yellow-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>🧾 Boletos de Peças</span>
             </button>
@@ -364,14 +303,10 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
         </div>
       </aside>
 
-      {/* Conteúdo Principal */}
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-gray-900 border-b border-gray-800 px-6 hidden md:flex items-center justify-between">
-          
           <div className="flex items-center space-x-4">
             <span className="text-sm font-bold uppercase tracking-wider text-gray-400">Controle BOXB1</span>
-            
-            {/* NOVO SELETOR MENSAL INTEGRADO */}
             <div className="flex items-center space-x-2 bg-gray-950 px-3 py-1.5 rounded-lg border border-gray-700">
               <span className="text-xs text-gray-400 font-bold">MÊS/ARQUIVO:</span>
               <select 
@@ -401,7 +336,6 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
             <div className="text-xs text-gray-400 py-10 text-center">Carregando informações do Supabase...</div>
           ) : (
             <>
-              {/* ALERTA DE ARQUIVO PASSADO */}
               {mesSelecionado !== getMesAtualYYYYMM() && (
                 <div className="bg-blue-900/30 border border-blue-800 p-4 rounded-xl flex items-center justify-between text-blue-300 shadow-md">
                   <span className="text-xs font-bold">📂 Visualizando registro arquivado de <strong>{formatarMesAno(mesSelecionado)}</strong></span>
@@ -409,13 +343,16 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                 </div>
               )}
 
-              {/* 1. VISÃO GERAL */}
               {abaAtiva === 'visao-geral' && (
                 <div className="space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl shadow-xl">
-                      <span className="text-[11px] uppercase font-bold text-gray-400">Faturamento Bruto</span>
+                      <span className="text-[11px] uppercase font-bold text-gray-400">Faturamento Bruto (Pago)</span>
                       <h2 className="text-2xl font-black text-green-400 mt-2">R$ {faturamentoTotalMes.toFixed(2)}</h2>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl shadow-xl">
+                      <span className="text-[11px] uppercase font-bold text-gray-400">Total a Receber (Pendente)</span>
+                      <h2 className="text-2xl font-black text-yellow-400 mt-2">R$ {totalPendenteMes.toFixed(2)}</h2>
                     </div>
                     <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl shadow-xl">
                       <span className="text-[11px] uppercase font-bold text-gray-400">Total Despesas / Gastos</span>
@@ -431,7 +368,6 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                     </div>
                   </div>
 
-                  {/* BLOCO DE VALORES POR MÉTODO DE PAGAMENTO (SOLICITADO) */}
                   <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl space-y-4">
                     <h3 className="text-sm font-bold uppercase tracking-wider text-yellow-500">Valores Recebidos por Método de Pagamento ({formatarMesAno(mesSelecionado)})</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -443,22 +379,20 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                           </div>
                         ))
                       ) : (
-                        <p className="text-xs text-gray-500 col-span-4 py-2">Nenhum pagamento registrado neste mês.</p>
+                        <p className="text-xs text-gray-500 col-span-4 py-2">Nenhum pagamento quitado registrado neste mês.</p>
                       )}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* 2. ORÇAMENTO WHATSAPP */}
               {abaAtiva === 'orcamento-zap' && <GeradorOrcamentoWhatsApp />}
 
-              {/* 3. RELATÓRIO CARTÃO CONTADOR (MENSAL) */}
               {abaAtiva === 'contador-cartao' && (
                 <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
                   <div>
-                    <h3 className="text-lg md:text-xl font-black text-white">Relatório de Pagamentos em Cartão - {formatarMesAno(mesSelecionado)}</h3>
-                    <p className="text-xs text-gray-400 mt-1">Listagem detalhada de recebimentos para envio ao contador.</p>
+                    <h3 className="text-lg md:text-xl font-black text-white">Relatório de Pagamentos em Cartão (Quitados) - {formatarMesAno(mesSelecionado)}</h3>
+                    <p className="text-xs text-gray-400 mt-1">Listagem detalhada de recebimentos em cartão para envio ao contador.</p>
                   </div>
 
                   <div className="bg-gray-950 p-4 rounded-xl border border-gray-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
@@ -466,7 +400,7 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                       <span className="text-xs text-gray-400">Total Acumulado em Cartões no Mês:</span>
                       <strong className="text-green-400 text-base md:text-lg block">R$ {totalCartaoMes.toFixed(2)}</strong>
                     </div>
-                    <span className="text-xs text-yellow-500 font-semibold">{pagamentosCartaoMes.length} transação(ões) registradas</span>
+                    <span className="text-xs text-yellow-500 font-semibold">{pagamentosCartaoMes.length} transação(ões) quitadas</span>
                   </div>
 
                   <div className="space-y-2">
@@ -476,7 +410,6 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                           <strong className="text-yellow-400">{os.os_codigo}</strong> - <span className="text-gray-300">{os.problema_relatado}</span>
                           <span className="text-[10px] text-gray-500 block mt-1">
                             Data: {new Date(os.criado_em).toLocaleDateString()} | Modalidade: <span className="text-blue-300 uppercase">{os.forma_pagamento}</span>
-                            {os.forma_pagamento?.includes('x') && <span className="text-red-400 ml-2 font-bold">(Venda Parcelada c/ Taxas)</span>}
                           </span>
                         </div>
                         <div className="flex items-center space-x-4">
@@ -485,17 +418,16 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                         </div>
                       </div>
                     ))}
-                    {pagamentosCartaoMes.length === 0 && <p className="text-xs text-gray-500 text-center py-6">Nenhum pagamento em cartão registrado nesta pasta mensal.</p>}
+                    {pagamentosCartaoMes.length === 0 && <p className="text-xs text-gray-500 text-center py-6">Nenhum pagamento em cartão quitado registrado nesta pasta mensal.</p>}
                   </div>
                 </div>
               )}
 
-              {/* 4. LUCRO E CUSTOS DE PEÇAS (MENSAL COM EDIÇÃO) */}
               {abaAtiva === 'lucro-pecas' && (
                 <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
                   <div>
                     <h3 className="text-lg md:text-xl font-black text-white">Balanço de Peças Registradas - {formatarMesAno(mesSelecionado)}</h3>
-                    <p className="text-xs text-gray-400 mt-1">Acompanhamento de finanças mensal. As peças zeram no final do mês e ficam armazenadas na pasta de histórico.</p>
+                    <p className="text-xs text-gray-400 mt-1">Acompanhamento de finanças mensal.</p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -551,26 +483,24 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                 </div>
               )}
 
-              {/* 5. LUCRO LÍQUIDO E BALANÇO TOTAL (SEMANAL E MENSAL INTEGRADO) */}
               {abaAtiva === 'lucro-total' && (
                 <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
                   <div>
                     <h3 className="text-lg md:text-xl font-black text-white">Balanço do Mês - {formatarMesAno(mesSelecionado)}</h3>
-                    <p className="text-xs text-gray-400 mt-1">Cálculos integrados, zerados mensalmente. Inclui as peças lançadas e gastos no fechamento.</p>
+                    <p className="text-xs text-gray-400 mt-1">Cálculos integrados baseados estritamente em serviços efetivamente pagos.</p>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Fechamento Mensal */}
                     <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4 text-xs">
                       <h4 className="font-bold text-yellow-500 uppercase border-b border-gray-800 pb-2">Extrato Mensal Consolidado</h4>
                       <div className="flex justify-between py-1 border-b border-gray-800/50">
-                        <span className="text-gray-400">(+) Faturamento Serviços (O.S.):</span><strong className="text-green-400 text-sm">R$ {faturamentoTotalMes.toFixed(2)}</strong>
+                        <span className="text-gray-400">(+) Faturamento Serviços Pagos:</span><strong className="text-green-400 text-sm">R$ {faturamentoTotalMes.toFixed(2)}</strong>
                       </div>
                       <div className="flex justify-between py-1 border-b border-gray-800/50">
                         <span className="text-gray-400">(+) Lucro Sobre Peças Lançadas:</span><strong className="text-blue-400 text-sm">R$ {lucroTotalPecasMes.toFixed(2)}</strong>
                       </div>
                       <div className="flex justify-between py-1 border-b border-gray-800/50">
-                        <span className="text-gray-400">(-) Despesas Gerais e Custos (Luz, Func., etc):</span><strong className="text-red-400 text-sm">R$ {totalDespesasMes.toFixed(2)}</strong>
+                        <span className="text-gray-400">(-) Despesas Gerais e Custos:</span><strong className="text-red-400 text-sm">R$ {totalDespesasMes.toFixed(2)}</strong>
                       </div>
                       <div className="flex justify-between py-1 border-b border-gray-800/50">
                         <span className="text-gray-400">(-) Boletos e Fornecedores:</span><strong className="text-red-400 text-sm">R$ {totalBoletosPecasMes.toFixed(2)}</strong>
@@ -581,9 +511,8 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                       </div>
                     </div>
 
-                    {/* Faturamento Semanal */}
                     <div className="bg-gray-950 p-6 rounded-xl border border-gray-800 space-y-4 text-xs">
-                      <h4 className="font-bold text-blue-400 uppercase border-b border-gray-800 pb-2">Faturamento Semanal (Serviços)</h4>
+                      <h4 className="font-bold text-blue-400 uppercase border-b border-gray-800 pb-2">Faturamento Semanal (Serviços Pagos)</h4>
                       <div className="flex justify-between py-1.5"><span className="text-gray-400">Semana 1 (Dias 01-07):</span><strong className="text-white">R$ {balancoSemanal[0].toFixed(2)}</strong></div>
                       <div className="flex justify-between py-1.5"><span className="text-gray-400">Semana 2 (Dias 08-14):</span><strong className="text-white">R$ {balancoSemanal[1].toFixed(2)}</strong></div>
                       <div className="flex justify-between py-1.5"><span className="text-gray-400">Semana 3 (Dias 15-21):</span><strong className="text-white">R$ {balancoSemanal[2].toFixed(2)}</strong></div>
@@ -593,15 +522,12 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                 </div>
               )}
 
-              {/* 6. COMANDA DIGITAL ADMIN */}
               {abaAtiva === 'comanda' && <ComandaDigitalOS />}
 
-              {/* 7. DESPESAS COM EDIÇÃO E EXCLUSÃO (MENSAL) */}
               {abaAtiva === 'despesas' && (
                 <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
                   <div>
                     <h3 className="text-lg md:text-xl font-black text-white">Gerenciamento de Despesas - {formatarMesAno(mesSelecionado)}</h3>
-                    <p className="text-xs text-gray-400 mt-1">Cadastre, edite ou exclua custos como luz, funcionários e aluguel do mês vigente ou do histórico.</p>
                   </div>
 
                   {mensagemDespesa && <div className="bg-gray-950 p-3 rounded border border-gray-800 text-xs text-yellow-400 font-semibold">{mensagemDespesa}</div>}
@@ -668,19 +594,16 @@ export default function AdminFinanceiroMaster({ emailUsuario, onLogout }: AdminF
                 </div>
               )}
 
-              {/* ABA 8 PEÇAS (LEGACY) */}
               {abaAtiva === 'pecas' && (
                 <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 md:p-8 shadow-xl text-center">
                   <h3 className="text-lg font-black text-white">Visualização de Peças</h3>
-                  <p className="text-xs text-gray-400 mt-2">A lista e controle de peças foi integrada ao painel "📦 Lucro & Custos de Peças" para gerenciamento mensal.</p>
+                  <p className="text-xs text-gray-400 mt-2">A lista e controle de peças foi integrada ao painel "📦 Lucro & Custos de Peças".</p>
                   <button onClick={() => setAbaAtiva('lucro-pecas')} className="mt-4 bg-yellow-600 px-4 py-2 rounded font-bold text-xs text-white">Ir para Controle de Peças</button>
                 </div>
               )}
 
-              {/* 9. GESTÃO DE CLIENTES & HISTÓRICO DE O.S. (COMPONENTIZADO) */}
               {abaAtiva === 'clientes' && <PainelGestaoClientes />}
 
-              {/* 10. BOLETOS MENSAL */}
               {abaAtiva === 'boletos' && (
                 <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 md:p-8 shadow-xl space-y-4">
                   <h3 className="text-lg md:text-xl font-black text-white">Controle de Boletos de Peças - {formatarMesAno(mesSelecionado)}</h3>

@@ -26,7 +26,6 @@ export default function PainelGestaoClientes() {
   const [carregando, setCarregando] = useState<boolean>(true);
   const [mensagem, setMensagem] = useState<string>('');
 
-  // Estados de Edição
   const [editandoClienteId, setEditandoClienteId] = useState<string | null>(null);
   const [novoNomeCliente, setNovoNomeCliente] = useState<string>('');
   const [novoTelefoneCliente, setNovoTelefoneCliente] = useState<string>('');
@@ -34,6 +33,8 @@ export default function PainelGestaoClientes() {
   const [editandoOsId, setEditandoOsId] = useState<string | null>(null);
   const [novoProblemaOs, setNovoProblemaOs] = useState<string>('');
   const [novoValorOs, setNovoValorOs] = useState<string>('');
+  const [novoStatusOs, setNovoStatusOs] = useState<string>('pendente');
+  const [novaFormaPagamentoOs, setNovaFormaPagamentoOs] = useState<string>('pix');
 
   useEffect(() => {
     carregarClientes();
@@ -51,13 +52,11 @@ export default function PainelGestaoClientes() {
 
       const listaMapeada = await Promise.all(
         (cliData || []).map(async (cli) => {
-          // 1. Busca O.S. vinculadas diretamente pelo cliente_id
           const { data: osDireta } = await supabase
             .from('ordens_servico')
             .select('*')
             .eq('cliente_id', cli.id);
 
-          // 2. Busca veículos do cliente para capturar O.S. vinculadas pelo veiculo_id
           const { data: veiculosData } = await supabase
             .from('veiculos')
             .select('id')
@@ -73,7 +72,6 @@ export default function PainelGestaoClientes() {
             if (osVeiculoData) osPorVeiculo = osVeiculoData;
           }
 
-          // Combina e remove duplicatas de O.S.
           const todasOsMap = new Map();
           [...(osDireta || []), ...osPorVeiculo].forEach(os => todasOsMap.set(os.id, os));
           const ordensUnicas = Array.from(todasOsMap.values()).sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
@@ -119,12 +117,14 @@ export default function PainelGestaoClientes() {
         .from('ordens_servico')
         .update({ 
           problema_relatado: novoProblemaOs, 
-          valor_total: parseFloat(novoValorOs) || 0 
+          valor_total: parseFloat(novoValorOs) || 0,
+          status_pagamento: novoStatusOs,
+          forma_pagamento: novaFormaPagamentoOs
         })
         .eq('id', osId);
 
       if (error) throw error;
-      setMensagem('Ordem de serviço atualizada com sucesso!');
+      setMensagem('Ordem de serviço e status de pagamento atualizados com sucesso!');
       setEditandoOsId(null);
       carregarClientes();
     } catch (err: any) {
@@ -146,7 +146,7 @@ export default function PainelGestaoClientes() {
   };
 
   const excluirOs = async (osId: string) => {
-    if (!confirm('Deseja realmente excluir esta Ordem de Serviço?')) return;
+    if (!confirm('Deseja realmente excluir esta Ordem de Serviço permanentemente?')) return;
     try {
       const { error } = await supabase.from('ordens_servico').delete().eq('id', osId);
       if (error) throw error;
@@ -166,7 +166,7 @@ export default function PainelGestaoClientes() {
       <div className="flex justify-between items-center border-b border-gray-800 pb-4">
         <div>
           <h3 className="text-xl font-black text-white">Lista de Clientes & Histórico de O.S.</h3>
-          <p className="text-xs text-gray-400 mt-1">Clique em um cliente para ver, editar ou excluir dados cadastrais e Ordens de Serviço.</p>
+          <p className="text-xs text-gray-400 mt-1">Gerencie dados cadastrais, altere status de pagamento ou exclua Ordens de Serviço.</p>
         </div>
         <button onClick={carregarClientes} className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-xs py-2 px-4 rounded-lg cursor-pointer">
           🔄 Atualizar
@@ -242,10 +242,38 @@ export default function PainelGestaoClientes() {
                       </div>
 
                       {editandoOsId === os.id ? (
-                        <div className="space-y-2 pt-2 border-t border-gray-800">
-                          <textarea value={novoProblemaOs} onChange={(e) => setNovoProblemaOs(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-white" rows={2} />
-                          <input type="number" step="0.01" value={novoValorOs} onChange={(e) => setNovoValorOs(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-1 text-xs text-white" />
-                          <button onClick={() => salvarEdicaoOs(os.id)} className="bg-green-600 text-white px-3 py-1 rounded text-xs font-bold">Salvar O.S.</button>
+                        <div className="space-y-3 pt-2 border-t border-gray-800">
+                          <div>
+                            <label className="text-[10px] text-gray-400 block mb-1">Descrição / Problema</label>
+                            <textarea value={novoProblemaOs} onChange={(e) => setNovoProblemaOs(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-white" rows={2} />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="text-[10px] text-gray-400 block mb-1">Valor (R$)</label>
+                              <input type="number" step="0.01" value={novoValorOs} onChange={(e) => setNovoValorOs(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-1.5 text-xs text-white" />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 block mb-1">Status Pagamento</label>
+                              <select value={novoStatusOs} onChange={(e) => setNovoStatusOs(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-1.5 text-xs text-white">
+                                <option value="pendente">Pendente</option>
+                                <option value="pago">Pago</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 block mb-1">Forma Pagto</label>
+                              <select value={novaFormaPagamentoOs} onChange={(e) => setNovaFormaPagamentoOs(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-1.5 text-xs text-white">
+                                <option value="pix">PIX</option>
+                                <option value="cartao_avista">Cartão à Vista</option>
+                                <option value="cartao_parcelado">Cartão Parcelado</option>
+                                <option value="dinheiro">Dinheiro</option>
+                                <option value="boleto">Boleto</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="flex space-x-2 pt-1">
+                            <button onClick={() => salvarEdicaoOs(os.id)} className="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded text-xs font-bold cursor-pointer">Salvar Alterações</button>
+                            <button onClick={() => setEditandoOsId(null)} className="bg-gray-800 text-gray-300 px-3 py-1.5 rounded text-xs font-bold cursor-pointer">Cancelar</button>
+                          </div>
                         </div>
                       ) : (
                         <div className="flex justify-between items-end pt-2 border-t border-gray-800">
@@ -257,7 +285,7 @@ export default function PainelGestaoClientes() {
                             <div>
                               <span className="font-black text-white text-sm block">R$ {Number(os.valor_total).toFixed(2)}</span>
                             </div>
-                            <button onClick={() => { setEditandoOsId(os.id); setNovoProblemaOs(os.problema_relatado); setNovoValorOs(os.valor_total.toString()); }} className="text-blue-400 hover:text-blue-300 font-bold">
+                            <button onClick={() => { setEditandoOsId(os.id); setNovoProblemaOs(os.problema_relatado); setNovoValorOs(os.valor_total.toString()); setNovoStatusOs(os.status_pagamento || 'pendente'); setNovaFormaPagamentoOs(os.forma_pagamento || 'pix'); }} className="text-blue-400 hover:text-blue-300 font-bold cursor-pointer">
                               Editar
                             </button>
                             <button onClick={() => excluirOs(os.id)} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-700/50 px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer">
