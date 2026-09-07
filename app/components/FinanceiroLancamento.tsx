@@ -27,7 +27,7 @@ export default function FinanceiroLancamento({ osIdMock = 'OS-2026-001' }: Finan
 
   /**
    * Função que processa o lançamento financeiro calculando taxas, juros 
-   * e separando os dados fiscais essenciais para o contador.
+   * e integrando diretamente com a tabela 'ordens_servico' do Supabase para aparecer no Admin.
    */
   const lidarComSalvarFinanceiro = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -40,31 +40,25 @@ export default function FinanceiroLancamento({ osIdMock = 'OS-2026-001' }: Finan
       const jurosNum = parseFloat(valorJuros) || 0;
       const valorTotalComJuros = valorNum + (teveJuros ? jurosNum : 0);
 
-      // Objeto estruturado com todas as variáveis financeiras e fiscais para o Supabase
-      const dadosFinanceiros = {
-        os_id: osId,
-        valor_bruto: valorNum,
-        status_pagamento: statusPagamento,
-        forma_pagamento: formaPagamento,
-        detalhes_cartao: formaPagamento === 'cartao_credito' ? {
-          tipo_cartao: tipoCartao,
-          parcelas: tipoCartao === 'credito_parcelado' ? numeroParcelas : 1,
-          teve_juros: teveJuros,
-          taxa_juros: teveJuros ? parseFloat(taxaJurosPercentual) : 0,
-          valor_juros: teveJuros ? jurosNum : 0,
-          valor_final_transacao: valorTotalComJuros
-        } : null,
-        criado_em: new Date().toISOString()
-      };
+      // Inserção real na tabela 'ordens_servico' para refletir no painel do Admin
+      const { error: erroSupabase } = await supabase.from('ordens_servico').insert([
+        {
+          os_codigo: osId,
+          cliente_nome: 'Cliente Balcão / O.S.',
+          forma_pagamento: formaPagamento,
+          valor_total: valorTotalComJuros,
+          problema_relatado: `Status: ${statusPagamento} | Modalidade: ${formaPagamento}`,
+          criado_em: new Date().toISOString()
+        }
+      ]);
 
-      // Simulação de salvamento estruturado (pronto para inserir na tabela 'financeiro' do Supabase)
-      console.log('Dados financeiros preparados para o Supabase:', dadosFinanceiros);
-      
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      
-      setMensagemSucesso('Lançamento financeiro vinculado à O.S. e registrado com sucesso para o relatório do contador!');
-    } catch (err) {
-      setErro('Erro ao registrar lançamento financeiro. Tente novamente.');
+      if (erroSupabase) throw erroSupabase;
+
+      setMensagemSucesso('Lançamento financeiro integrado com sucesso ao caixa do Admin!');
+      setValorBruto('');
+      setValorJuros('');
+    } catch (err: any) {
+      setErro('Erro ao registrar no Supabase: ' + err.message);
     } finally {
       setSalvando(false);
     }
