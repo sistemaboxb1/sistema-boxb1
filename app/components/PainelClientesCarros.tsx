@@ -45,10 +45,6 @@ export default function PainelClientesCarros() {
 
   const valorTotalDemanda = servicos.reduce((acc, s) => acc + s.valor, 0);
 
-  /**
-   * Função que persiste os dados efetivamente no Supabase usando as tabelas SQL criadas,
-   * garantindo que não sumam ao atualizar a página.
-   */
   const salvarClienteECarrosNoSupabase = async (e: React.FormEvent) => {
     e.preventDefault();
     setSalvando(true);
@@ -68,18 +64,21 @@ export default function PainelClientesCarros() {
       if (clienteError) throw clienteError;
       const clienteId = clienteData.id;
 
-      // 2. Insere o veículo vinculado ao cliente na tabela 'veiculos'
+      // 2. Insere ou atualiza o veículo vinculado ao cliente usando .upsert para evitar erro de placa duplicada
+      const placaFormatada = placa.trim().toUpperCase();
       const { data: veiculoData, error: veiculoError } = await supabase
         .from('veiculos')
-        .insert([
+        .upsert([
           {
             cliente_id: clienteId,
             modelo: modeloCarro.trim(),
-            placa: placa.trim().toUpperCase(),
+            placa: placaFormatada,
             ano: ano.trim(),
             quilometragem: quilometragem.trim()
           }
-        ])
+        ], {
+          onConflict: 'placa' // Se a placa já existir, atualiza os dados do carro em vez de dar erro
+        })
         .select()
         .single();
 
